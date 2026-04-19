@@ -99,6 +99,13 @@
                 </select>
             </div>
             <div class="settings-field">
+                <label for="setting-channel-sidebar">Channels</label>
+                <select id="setting-channel-sidebar" title="Show channels in a sidebar (Discord/Slack-style) instead of a top bar">
+                    <option value="top">Top bar</option>
+                    <option value="sidebar">Sidebar</option>
+                </select>
+            </div>
+            <div class="settings-field">
                 <label for="setting-rules-refresh">Rule refresh</label>
                 <select id="setting-rules-refresh" title="How often to re-send active rules to agents">
                     <option value="0">On rule changes</option>
@@ -155,6 +162,15 @@
         </div>
 
         <div id="content-area">
+            <aside id="channel-sidebar" class="hidden">
+                <div id="channel-sidebar-top"></div>
+                <div class="channel-sidebar-header">
+                    <span>Channels</span>
+                    <button id="channel-sidebar-add" class="channel-sidebar-header-add" onclick="showChannelCreateDialog()" title="Add channel">+</button>
+                </div>
+                <div id="channel-sidebar-list"></div>
+                <div class="channel-sidebar-grip" id="channel-sidebar-grip"></div>
+            </aside>
             <main id="timeline">
                 <div id="loading-indicator">
                     <div class="loading-spinner"></div>
@@ -230,7 +246,10 @@
                 </div>
                 <div class="schedules-bar-list hidden" id="schedules-list"></div>
             </div>
-            <div id="mention-toggles"></div>
+            <div id="mention-toggles-row">
+                <div id="mention-toggles"></div>
+                <button id="clear-chat-btn" class="ghost-btn" onclick="clearChat()" title="Clear chat in this channel">Clear Chat</button>
+            </div>
             <div id="slash-menu" class="hidden"></div>
             <div id="mention-menu" class="hidden"></div>
             <div id="attachments"></div>

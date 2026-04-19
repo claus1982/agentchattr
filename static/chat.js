@@ -1788,12 +1788,71 @@ function toggleSettings() {
     }
 }
 
-function clearChat() {
-    if (!confirm(`Clear all messages in #${activeChannel}? This cannot be undone.`)) return;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'message', text: '/clear', sender: username, channel: activeChannel }));
+function _clearClearChatConfirm() {
+    const btn = document.getElementById('clear-chat-btn');
+    const confirmEl = document.getElementById('clear-chat-confirm');
+    if (confirmEl) confirmEl.remove();
+    if (btn) {
+        btn.textContent = 'Clear Chat';
+        btn.classList.remove('confirming');
     }
-    document.getElementById('settings-bar').classList.add('hidden');
+    document.removeEventListener('click', _clearChatOutsideClick, true);
+}
+
+function _clearChatOutsideClick(e) {
+    const btn = document.getElementById('clear-chat-btn');
+    const confirmEl = document.getElementById('clear-chat-confirm');
+    if (!btn || !confirmEl) return;
+    if (!btn.contains(e.target) && !confirmEl.contains(e.target)) {
+        _clearClearChatConfirm();
+    }
+}
+
+function clearChat() {
+    const btn = document.getElementById('clear-chat-btn');
+    if (!btn) return;
+
+    // Second click -> execute. First click -> inline confirm, matching the
+    // End Session pattern elsewhere.
+    if (btn.classList.contains('confirming')) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'message', text: '/clear', sender: username, channel: activeChannel }));
+        }
+        _clearClearChatConfirm();
+        document.getElementById('settings-bar').classList.add('hidden');
+        return;
+    }
+
+    btn.textContent = 'Clear Chat?';
+    btn.classList.add('confirming');
+
+    const confirmWrap = document.createElement('span');
+    confirmWrap.id = 'clear-chat-confirm';
+    confirmWrap.className = 'session-inline-confirm';
+    confirmWrap.innerHTML = `
+        <button class="session-inline-confirm-yes ch-confirm-yes" title="Confirm clear chat">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3.5 3.5 6.5-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="session-inline-confirm-no ch-confirm-no" title="Cancel">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+    `;
+    btn.parentElement.insertBefore(confirmWrap, btn);
+
+    confirmWrap.querySelector('.ch-confirm-yes').onclick = (e) => {
+        e.stopPropagation();
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'message', text: '/clear', sender: username, channel: activeChannel }));
+        }
+        _clearClearChatConfirm();
+        document.getElementById('settings-bar').classList.add('hidden');
+    };
+    confirmWrap.querySelector('.ch-confirm-no').onclick = (e) => {
+        e.stopPropagation();
+        _clearClearChatConfirm();
+    };
+
+    setTimeout(() => document.addEventListener('click', _clearChatOutsideClick, true), 0);
 }
 
 function saveSettings() {
