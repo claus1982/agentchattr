@@ -59,7 +59,7 @@ mcp_http_key = "url"
 
 [agents.copilot]
 command = "copilot"
-cwd = ".."
+cwd = "../../Desktop/Routify"
 color = "#8534F3"
 label = "Copilot"
 mcp_inject = "settings_file"

@@ -35,7 +35,7 @@ if %errorlevel% neq 0 (
     goto :wait_server
 )
 
-python wrapper.py copilot
+python wrapper_copilot.py copilot
 if %errorlevel% neq 0 (
     echo.
     echo   Agent exited unexpectedly. Check the output above.
