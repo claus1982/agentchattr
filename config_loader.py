@@ -100,6 +100,17 @@ def _apply_env_overrides(config: dict) -> None:
         config.setdefault(section, {})[key] = value
 
 
+def _normalize_config_paths(config: dict, root: Path) -> None:
+    """Resolve config-file relative paths against the agentchattr root."""
+    for section, key in (("server", "data_dir"), ("images", "upload_dir")):
+        raw = config.get(section, {}).get(key)
+        if not isinstance(raw, str) or not raw:
+            continue
+        p = Path(raw)
+        if not p.is_absolute():
+            config.setdefault(section, {})[key] = str((root / p).resolve())
+
+
 def load_config(root: Path | None = None) -> dict:
     """Load config.toml and merge config.local.toml if it exists.
 
@@ -133,5 +144,6 @@ def load_config(root: Path | None = None) -> dict:
                 print(f"  Warning: Ignoring local agent '{name}' (already defined in config.toml)")
 
     _apply_env_overrides(config)
+    _normalize_config_paths(config, root)
 
     return config

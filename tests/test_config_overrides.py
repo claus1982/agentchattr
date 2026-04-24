@@ -43,7 +43,8 @@ class ConfigOverrideTests(unittest.TestCase):
     def test_no_env_vars_uses_config_toml_values(self):
         config = config_loader.load_config(ROOT)
         self.assertEqual(config["server"]["port"], 8300)
-        self.assertEqual(config["server"]["data_dir"], "./data")
+        self.assertEqual(config["server"]["data_dir"], str((ROOT / "data").resolve()))
+        self.assertEqual(config["images"]["upload_dir"], str((ROOT / "uploads").resolve()))
 
     def test_port_env_var_overrides_config(self):
         os.environ["AGENTCHATTR_PORT"] = "8310"

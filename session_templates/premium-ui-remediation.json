@@ -8,19 +8,19 @@
     {
       "name": "Baseline",
       "participants": ["implementer"],
-      "prompt": "Read the attached screenshots and current Routify.Web UI. Report concrete visual deltas, tool availability, and the best first implementation slice.",
+      "prompt": "Read the mockups, screenshots, and current Routify.Web UI. Report concrete visual deltas, tool availability, and the best first implementation slice.",
       "turn_order": "sequential"
     },
     {
       "name": "Plan",
       "participants": ["planner"],
-      "prompt": "Use implementer evidence to define the current slice, acceptance criteria, files/surfaces, and keep scope presentation-only.",
+      "prompt": "Use implementer evidence and the mockups as source of truth. Define the current slice, acceptance criteria, and files/surfaces while keeping scope presentation-only.",
       "turn_order": "sequential"
     },
     {
       "name": "Critique Plan",
       "participants": ["reviewer", "challenger"],
-      "prompt": "Critique the current slice against the premium Android target. Name what still risks feeling generic, cheap, or off-target.",
+      "prompt": "Critique the current slice against the mockups. Name anything that would still feel generic, cheap, or off-target on Android.",
       "turn_order": "sequential"
     },
     {
@@ -32,7 +32,7 @@
     {
       "name": "Assess",
       "participants": ["reviewer", "challenger"],
-      "prompt": "Assess only against the final target, not partial improvement. End with FINAL_STATUS: APPROVED only if nothing material remains; else FINAL_STATUS: CONTINUE plus exact gaps.",
+      "prompt": "Assess only against shippable mockup fidelity, not partial improvement. End with FINAL_STATUS: APPROVED only if it feels mockup-level with no material gaps; else FINAL_STATUS: CONTINUE plus exact gaps.",
       "turn_order": "sequential",
       "is_output": true,
       "complete_when_all_contain": "FINAL_STATUS: APPROVED"
@@ -40,7 +40,7 @@
     {
       "name": "Next Slice",
       "participants": ["planner"],
-      "prompt": "If Assess did not unanimously approve, define the next slice, acceptance criteria, files, and hand off to implementer. The session continues automatically.",
+      "prompt": "If Assess did not unanimously approve, define the next slice to close the exact mockup gaps, list acceptance criteria/files, and hand off to implementer. The session continues automatically.",
       "turn_order": "sequential",
       "loop_to_phase": 2
     }

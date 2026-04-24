@@ -2477,15 +2477,28 @@ def _auto_cast(roles: list[str], online_agents: list[str], started_by: str) -> d
     """Auto-assign roles to available agents. Returns empty dict if not enough agents."""
     cast = {}
     available = list(online_agents)
+    used = set()
+
+    # Prefer exact role-name matches first so reclaimed agents keep their slot
+    # even if another generic instance is still online after a restart.
+    for role in roles:
+        if role in online_agents and role not in used:
+            cast[role] = role
+            used.add(role)
+
+    available = [agent for agent in online_agents if agent not in used]
 
     for role in roles:
+        if role in cast:
+            continue
         if not available:
             # Reuse agents if we run out (one agent, multiple roles)
-            available = list(online_agents)
+            available = [agent for agent in online_agents if agent not in used] or list(online_agents)
         if not available:
             return {}
         agent = available.pop(0)
         cast[role] = agent
+        used.add(agent)
 
     return cast
 
