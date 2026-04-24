@@ -20,6 +20,64 @@ import urllib.request
 
 ROOT = Path(__file__).parent
 DEFAULT_TIMEOUT_SECONDS = 180
+MAX_CONTEXT_LINE_CHARS = 700
+MAX_CONTEXT_TOTAL_CHARS = 3500
+MAX_RULES_CHARS = 600
+MAX_PROMPT_CHARS = 6000
+
+
+def _clip_text(text: str, limit: int) -> str:
+    text = (text or "").strip()
+    if limit <= 0 or len(text) <= limit:
+        return text
+    if limit <= 16:
+        return text[:limit]
+    return f"{text[:limit - 15].rstrip()} ...(truncated)"
+
+
+def _trim_context_lines(lines: list[str], limit: int) -> list[str]:
+    kept: list[str] = []
+    total = 0
+    for line in reversed(lines):
+        line_len = len(line) + (1 if kept else 0)
+        if kept and total + line_len > limit:
+            break
+        kept.append(line)
+        total += line_len
+    return list(reversed(kept))
+
+
+def _build_role_task_instruction(role: str, *, in_job: bool) -> str:
+    role_key = (role or "").strip().lower()
+    if role_key == "planner":
+        location = "job thread" if in_job else "channel"
+        return (
+            f"You were mentioned in this {location} as the coordinator. The latest direct assignment is your task, "
+            "even when it is only coordination or monitoring work. In a single reply you must: "
+            "1) state the current status or blocker, "
+            "2) assign the next concrete slice to @implementer, "
+            "3) ask @reviewer for one focused critique, "
+            "4) ask @challenger for one focused critique, "
+            "5) state when the next update will happen. "
+            "Use direct instructions and explicit @mentions. Never answer with readiness, missing-task, or blocked-for-repo-task language."
+        )
+    if role_key == "reviewer":
+        return (
+            "You were mentioned as reviewer. Treat any visible slice, plan, status, or coordination brief as actionable. "
+            "Reply with one focused critique of the current slice or one concrete missing validation step. "
+            "Do not answer with readiness or missing-task language."
+        )
+    if role_key == "challenger":
+        return (
+            "You were mentioned as challenger. Treat any visible slice, plan, status, or coordination brief as actionable. "
+            "Reply with the sharpest concrete risk, missing edge, or premium-feel gap in the current slice. "
+            "Do not answer with readiness or missing-task language."
+        )
+    return (
+        "You were mentioned. Respond to the latest relevant message that mentions you. "
+        "If it assigns coordination, monitoring, planning, review, critique, or delegation work, perform that duty directly in chat with concrete next steps and @mentions. "
+        "Do not reply with readiness or ask the user to restate the task."
+    )
 
 
 def _run_prompt_command(command_args: list[str], *, cwd: Path, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess:
@@ -66,7 +124,7 @@ def main():
     parser.add_argument("--mcp-http-port", default=None, help="Override mcp.http_port (int)")
     parser.add_argument("--mcp-sse-port", default=None, help="Override mcp.sse_port (int)")
     parser.add_argument("--upload-dir", default=None, help="Override images.upload_dir (path)")
-    args = parser.parse_args()
+    args, extra = parser.parse_known_args()
 
     agent = args.agent
     agent_cfg = config["agents"][agent]
@@ -87,8 +145,8 @@ def main():
     base_env = {k: v for k, v in os.environ.items() if k not in strip_vars}
     timeout_seconds = int(agent_cfg.get("prompt_timeout", DEFAULT_TIMEOUT_SECONDS))
     context_messages = int(agent_cfg.get("context_messages", 20))
-    oneshot_profile_dir = data_dir / "copilot-oneshot-home"
-    oneshot_profile_dir.mkdir(parents=True, exist_ok=True)
+    oneshot_profiles_dir = data_dir / "copilot-oneshot-home"
+    oneshot_profiles_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         registration = _register_instance(server_port, agent, args.label)
@@ -111,12 +169,14 @@ def main():
     }
 
     def refresh_launch_state(instance_name: str, token: str):
+        instance_profile_dir = oneshot_profiles_dir / instance_name
+        instance_profile_dir.mkdir(parents=True, exist_ok=True)
         with state_lock:
-            state["launch_args"] = []
+            state["launch_args"] = list(extra)
             state["launch_env"] = {
                 **base_env,
-                "USERPROFILE": str(oneshot_profile_dir),
-                "HOME": str(oneshot_profile_dir),
+                "USERPROFILE": str(instance_profile_dir),
+                "HOME": str(instance_profile_dir),
             }
 
     def get_name() -> str:
@@ -208,13 +268,37 @@ def main():
         sender = msg.get("sender", "user")
         text = (msg.get("text", "") or "").strip()
         timestamp = msg.get("time", "") or ""
+        attachments = msg.get("attachments", []) or []
         prefix = f"[{timestamp}] " if timestamp else ""
+
+        attachment_note = ""
+        if attachments:
+            attachment_names = []
+            for attachment in attachments[:4]:
+                if not isinstance(attachment, dict):
+                    continue
+                name = (attachment.get("name") or "").strip()
+                if not name:
+                    url = (attachment.get("url") or "").strip()
+                    if url:
+                        name = Path(url).name
+                if not name:
+                    name = attachment.get("type") or "attachment"
+                attachment_names.append(name)
+            if attachment_names:
+                remainder = len(attachments) - len(attachment_names)
+                suffix = f" (+{remainder} more)" if remainder > 0 else ""
+                attachment_note = f" [attachments: {', '.join(attachment_names)}{suffix}]"
+            else:
+                attachment_note = f" [attachments: {len(attachments)}]"
+
         if text:
-            return f"{prefix}{sender}: {text}"
-        return f"{prefix}{sender}:"
+            return f"{prefix}{sender}: {text}{attachment_note}"
+        return f"{prefix}{sender}:{attachment_note}"
 
     def build_prompt(*, channel: str, job_id: int | None, task_instruction: str, role: str, rules_text: str, include_identity_hint: bool) -> str:
         current_name = get_name()
+        role_key = (role or "").strip().lower()
         if job_id is not None:
             conversation = read_job_messages(job_id)
             scope_line = f"Job thread: {job_id}"
@@ -226,14 +310,17 @@ def main():
             msg for msg in conversation
             if isinstance(msg, dict)
             and msg.get("sender") not in {"system", current_name}
-            and (msg.get("text", "") or "").strip()
+            and ((msg.get("text", "") or "").strip() or (msg.get("attachments", []) or []))
         ]
         context_lines = [
-            _format_context_line(msg)
+            _clip_text(_format_context_line(msg), MAX_CONTEXT_LINE_CHARS)
             for msg in filtered_messages[-context_messages:]
         ]
+        context_lines = _trim_context_lines(context_lines, MAX_CONTEXT_TOTAL_CHARS)
         recent_context = "\n".join(context_lines).strip() or "(no recent chat context available)"
         latest_message = context_lines[-1] if context_lines else "(no latest message available)"
+        latest_message = _clip_text(latest_message, 1200)
+        rules_text = _clip_text(rules_text, MAX_RULES_CHARS)
 
         parts = [
             "You are GitHub Copilot participating in an agentchattr room.",
@@ -241,6 +328,12 @@ def main():
             "Reply in plain text only and do not prefix your own name.",
             "Do not call MCP tools, do not use external tools, and do not try to read more context.",
             "All of the context you need for this reply is provided below.",
+            "If the latest message directly assigns you a chat duty, that duty is the task.",
+            "Treat coordination, planning, monitoring, review, critique, and delegation requests as actionable tasks; do not reply that there is no task when the user has assigned one in chat.",
+            "If recent context references screenshots or attachments you cannot inspect directly, do not block on that limitation. Use the attachment hints in context, delegate visual inspection to the most appropriate teammate if needed, and keep the work moving.",
+            "If your role is Planner, default to choosing the next concrete slice, assigning it by @mention, and monitoring progress in chat.",
+            "If your role is Reviewer or Challenger, default to critiquing the current plan or progress and stating the next missing evidence, delta, or adjustment.",
+            "Forbidden replies when the latest message gives you a direct duty: 'Ready.', 'Understood.', 'No actionable task was provided', 'I need the actual task'. Perform the duty instead.",
             scope_line,
         ]
         if role:
@@ -249,12 +342,29 @@ def main():
             parts.append(f"Rules: {rules_text}")
         if include_identity_hint:
             parts.append(_IDENTITY_HINT.strip())
+        if role_key == "planner":
+            parts.append(
+                "Planner output contract: your reply must include these lines in plain text: "
+                "'stato corrente:', '@implementer:', '@reviewer:', '@challenger:', 'prossimo update:'."
+            )
+        elif role_key in {"reviewer", "challenger"}:
+            parts.append("Critique output contract: name one concrete issue or one concrete validation step for the current slice.")
         parts.append(f"Task: {task_instruction}")
         parts.append(f"The latest message you must answer is: {latest_message}")
         parts.append("Follow the latest message exactly when it contains a direct instruction.")
         parts.append("Recent conversation:")
         parts.append(recent_context)
-        return "\n\n".join(parts)
+
+        prompt = "\n\n".join(parts)
+        if len(prompt) <= MAX_PROMPT_CHARS:
+            return prompt
+
+        shortened_context = _trim_context_lines(context_lines, max(1200, MAX_CONTEXT_TOTAL_CHARS // 2))
+        prompt = "\n\n".join([
+            *parts[:-1],
+            "\n".join(shortened_context).strip() or "(recent context truncated)",
+        ])
+        return _clip_text(prompt, MAX_PROMPT_CHARS)
 
     def run_copilot_prompt(prompt: str) -> str:
         launch_args, launch_env = get_launch()
@@ -369,22 +479,14 @@ def main():
                                 custom_prompt = raw_prompt.strip()
 
                     if has_trigger:
-                        if custom_prompt:
-                            task_instruction = custom_prompt
-                        elif job_id is not None:
-                            task_instruction = (
-                                "You were mentioned in this job thread. Respond to the latest relevant message "
-                                "in the same thread."
-                            )
-                        else:
-                            task_instruction = (
-                                "You were mentioned in this channel. Respond to the latest relevant message "
-                                "that mentions you."
-                            )
-
                         role = _fetch_role(server_port, current_name)
                         if not role and current_name != agent:
                             role = _fetch_role(server_port, agent)
+
+                        if custom_prompt:
+                            task_instruction = custom_prompt
+                        else:
+                            task_instruction = _build_role_task_instruction(role, in_job=job_id is not None)
 
                         current_token = get_token()
                         rules_data = _fetch_active_rules(server_port, current_token)

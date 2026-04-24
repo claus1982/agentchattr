@@ -198,6 +198,11 @@ class SessionEngine:
                 self._trigger_current(session)
         else:
             # Phase complete
+            if self._phase_is_complete(session, phase):
+                self._store.complete(session["id"], message_id)
+                log.info("Session %d complete via phase '%s' gate", session["id"], phase["name"])
+                return
+
             next_phase = phase_idx + 1
             if next_phase < len(phases):
                 # More phases
@@ -214,6 +219,23 @@ class SessionEngine:
                     )
                     self._trigger_current(session)
             else:
+                loop_to_phase = phase.get("loop_to_phase")
+                if isinstance(loop_to_phase, int) and 0 <= loop_to_phase < len(phases):
+                    session = self._store.jump_to_phase(session["id"], loop_to_phase, message_id)
+                    if session:
+                        next_phase_obj = phases[loop_to_phase]
+                        self._messages.add(
+                            sender="system",
+                            text=f"Phase: {next_phase_obj['name']}",
+                            msg_type="session_phase",
+                            channel=session.get("channel", "general"),
+                            metadata={"session_id": session["id"],
+                                      "phase": loop_to_phase,
+                                      "phase_name": next_phase_obj["name"]},
+                        )
+                        self._trigger_current(session)
+                    return
+
                 # Session complete - check if this was the output phase
                 is_output = phase.get("is_output", False)
                 self._store.complete(session["id"],
@@ -291,6 +313,15 @@ class SessionEngine:
         if role.lower() in _DISSENT_ROLES:
             lines.append(f"\n{_DISSENT_LINE}")
 
+        completion_marker = phase.get("complete_when_all_contain")
+        if isinstance(completion_marker, str) and completion_marker.strip():
+            lines.append(
+                f"This phase decides whether the session ends. Include the exact line '{completion_marker}' only if the work is fully complete with no material gaps."
+            )
+
+        if isinstance(phase.get("loop_to_phase"), int):
+            lines.append("After your message, the session will automatically continue into the next work cycle.")
+
         lines.append("")
         lines.append(f"IMPORTANT: You MUST respond using the 'chat_send' tool in the #{channel} channel. "
                       "The session flow is blocked until your message appears in the chat. "
@@ -323,6 +354,49 @@ class SessionEngine:
         role = participants[turn_idx]
         cast = session.get("cast", {})
         return cast.get(role)
+
+    def _phase_is_complete(self, session: dict, phase: dict) -> bool:
+        """Return True when a phase explicitly signals session completion."""
+        completion_marker = phase.get("complete_when_all_contain")
+        if not isinstance(completion_marker, str) or not completion_marker.strip():
+            return False
+
+        participants = phase.get("participants", [])
+        if not participants:
+            return False
+
+        phase_messages = self._get_phase_messages(session, participants)
+        if len(phase_messages) != len(participants):
+            return False
+
+        marker = completion_marker.strip().lower()
+        return all(marker in msg.get("text", "").lower() for msg in phase_messages)
+
+    def _get_phase_messages(self, session: dict, participants: list[str]) -> list[dict]:
+        """Get the latest response from each phase participant since the phase banner."""
+        recent = self._messages.get_recent(200, channel=session.get("channel", "general"))
+        phase_idx = session.get("current_phase", 0)
+        start_idx = 0
+
+        for idx in range(len(recent) - 1, -1, -1):
+            msg = recent[idx]
+            meta = msg.get("metadata", {})
+            if (
+                msg.get("type") == "session_phase"
+                and meta.get("session_id") == session.get("id")
+                and meta.get("phase") == phase_idx
+            ):
+                start_idx = idx + 1
+                break
+
+        phase_messages = recent[start_idx:]
+        latest_by_sender = {}
+        for msg in phase_messages:
+            sender = msg.get("sender", "")
+            if sender in participants and msg.get("type", "chat") == "chat":
+                latest_by_sender[sender] = msg
+
+        return [latest_by_sender[p] for p in participants if p in latest_by_sender]
 
     def _enrich(self, session: dict) -> dict:
         """Add computed fields to a session dict for the frontend."""

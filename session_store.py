@@ -229,6 +229,24 @@ class SessionStore:
         self._fire("update", result)
         return result
 
+    def jump_to_phase(self, session_id: int, phase_index: int,
+                      message_id: int | None = None) -> dict | None:
+        """Jump to an explicit phase, resetting turn to 0."""
+        with self._lock:
+            session = self._find(session_id)
+            if not session or session["state"] not in ("active", "waiting"):
+                return None
+            session["current_phase"] = phase_index
+            session["current_turn"] = 0
+            session["state"] = "active"
+            session["updated_at"] = time.time()
+            if message_id is not None:
+                session["last_message_id"] = message_id
+            self._save()
+            result = dict(session)
+        self._fire("update", result)
+        return result
+
     def set_waiting(self, session_id: int, agent: str) -> dict | None:
         """Mark session as waiting on a specific agent."""
         with self._lock:
@@ -350,6 +368,17 @@ def validate_session_template(tmpl: dict) -> list[str]:
             errors.append(f"Phase {i + 1}: prompt too long ({len(prompt)} chars, max 200)")
         if phase.get("is_output"):
             output_count += 1
+        completion_marker = phase.get("complete_when_all_contain")
+        if completion_marker is not None and not isinstance(completion_marker, str):
+            errors.append(f"Phase {i + 1}: 'complete_when_all_contain' must be a string")
+        loop_to_phase = phase.get("loop_to_phase")
+        if loop_to_phase is not None:
+            if not isinstance(loop_to_phase, int):
+                errors.append(f"Phase {i + 1}: 'loop_to_phase' must be an integer")
+            elif isinstance(phases, list) and not (0 <= loop_to_phase < len(phases)):
+                errors.append(
+                    f"Phase {i + 1}: 'loop_to_phase' must target an existing phase index"
+                )
 
     if output_count == 0 and isinstance(phases, list) and len(phases) > 0:
         errors.append("No phase marked as 'is_output: true'")

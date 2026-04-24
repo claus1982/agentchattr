@@ -1,0 +1,48 @@
+{
+  "id": "premium-ui-remediation",
+  "name": "Premium UI Remediation",
+  "description": "Autonomous premium-Android UI pass driven by implementer evidence, planning, critique, and validation.",
+  "roles": ["implementer", "planner", "reviewer", "challenger"],
+  "user_required": false,
+  "phases": [
+    {
+      "name": "Baseline",
+      "participants": ["implementer"],
+      "prompt": "Read the attached screenshots and current Routify.Web UI. Report concrete visual deltas, tool availability, and the best first implementation slice.",
+      "turn_order": "sequential"
+    },
+    {
+      "name": "Plan",
+      "participants": ["planner"],
+      "prompt": "Use implementer evidence to define the current slice, acceptance criteria, files/surfaces, and keep scope presentation-only.",
+      "turn_order": "sequential"
+    },
+    {
+      "name": "Critique Plan",
+      "participants": ["reviewer", "challenger"],
+      "prompt": "Critique the current slice against the premium Android target. Name what still risks feeling generic, cheap, or off-target.",
+      "turn_order": "sequential"
+    },
+    {
+      "name": "Implement",
+      "participants": ["implementer"],
+      "prompt": "Implement the current slice in Routify.Web. Validate it. Report files, evidence, remaining gaps, and whether another slice is required.",
+      "turn_order": "sequential"
+    },
+    {
+      "name": "Assess",
+      "participants": ["reviewer", "challenger"],
+      "prompt": "Assess only against the final target, not partial improvement. End with FINAL_STATUS: APPROVED only if nothing material remains; else FINAL_STATUS: CONTINUE plus exact gaps.",
+      "turn_order": "sequential",
+      "is_output": true,
+      "complete_when_all_contain": "FINAL_STATUS: APPROVED"
+    },
+    {
+      "name": "Next Slice",
+      "participants": ["planner"],
+      "prompt": "If Assess did not unanimously approve, define the next slice, acceptance criteria, files, and hand off to implementer. The session continues automatically.",
+      "turn_order": "sequential",
+      "loop_to_phase": 2
+    }
+  ]
+}

@@ -23,7 +23,8 @@ On first launch, the script auto-creates a virtual environment, installs Python 
 - `start_claude.bat` — starts Claude
 - `start_codex.bat` — starts Codex
 - `start_gemini.bat` — starts Gemini
-- `start_copilot.bat` — starts GitHub Copilot CLI (requires `npm install -g @github/copilot`)
+- `start_copilot.bat` — starts GitHub Copilot in reliable activation mode (one-shot, no MCP/tools)
+- `start_copilot_tools.bat` — starts GitHub Copilot in interactive MCP/tool-enabled mode
 - `start_kimi.bat` — starts Kimi
 - `start_qwen.bat` — starts Qwen
 - `start_kilo.bat` — starts Kilo
@@ -39,6 +40,8 @@ On first launch, the script auto-creates a virtual environment, installs Python 
 - `start_qwen_yolo.bat` — Qwen with `--yolo`
 
 </details>
+
+> **Copilot on Windows:** `start_copilot.bat` is the reliable default when you mainly need `@copilot` activation to work. Use `start_copilot_tools.bat` only when you specifically want the interactive MCP/tool-enabled Copilot session.
 
 **2. Open the chat:** Go to **http://localhost:8300** in your browser, or double-click `open_chat.html`.
 
@@ -360,7 +363,7 @@ claude mcp add agentchattr --transport http http://127.0.0.1:8200/mcp
 
 **CodeBuddy** — use the `start_codebuddy` launcher. It registers the CodeBuddy agent with the server, receives a per-agent bearer token from `/api/register`, and writes `~/.codebuddy/.mcp.json` with that token baked in. Manual config is not recommended here — the `Authorization` header needs a registered agent token (not the browser session token), and the registration happens inside the wrapper. If you really need to see the generated config, open `~/.codebuddy/.mcp.json` after the first launcher run.
 
-**GitHub Copilot CLI** — use the `start_copilot` launcher. It writes `~/.copilot/mcp-config.json` with a registered agent bearer token, the same way CodeBuddy does. Install the CLI first with `npm install -g @github/copilot`. Manual config is discouraged for the same reason as CodeBuddy (the token needs to be a registered agent token).
+**GitHub Copilot CLI** — on Windows, `start_copilot.bat` is the reliable one-shot activation launcher and intentionally does not load MCP/tools. Use `start_copilot_tools.bat` when you want the interactive MCP-enabled Copilot session; that launcher writes `~/.copilot/mcp-config.json` with a registered agent bearer token, the same way CodeBuddy does. On macOS/Linux, `start_copilot.sh` remains the MCP-enabled launcher. Install the CLI first with `npm install -g @github/copilot`. Manual config is discouraged for the same reason as CodeBuddy (the token needs to be a registered agent token).
 
 ### Starting the server separately
 
@@ -375,6 +378,12 @@ windows\start.bat
 
 # Terminal 2 — agent wrapper (any platform)
 python wrapper.py claude
+
+# Windows reliable Copilot activation (one-shot, no MCP/tools)
+python wrapper_copilot.py copilot
+
+# Windows/macOS/Linux interactive Copilot with MCP/tools
+python wrapper.py copilot
 
 # With auto-approve (flags pass through after --)
 python wrapper.py claude -- --dangerously-skip-permissions

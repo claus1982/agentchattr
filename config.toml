@@ -15,7 +15,7 @@ label = "Claude"
 
 [agents.codex]
 command = "codex"
-cwd = ".."
+cwd = "../../Desktop/Routify"
 color = "#10a37f"
 label = "Codex"
 

@@ -1,7 +1,7 @@
 @echo off
 REM agentchattr - starts server (if not running) + GitHub Copilot CLI wrapper
-REM Reliable activation mode: uses one-shot copilot -p and does not load MCP/tools.
-REM Usage: start_copilot.bat
+REM Tool-enabled mode: uses the interactive MCP-enabled wrapper.
+REM Usage: start_copilot_tools.bat
 REM Requires the copilot CLI on PATH. First launch prompts GitHub login.
 cd /d "%~dp0.."
 
@@ -36,7 +36,7 @@ if %errorlevel% neq 0 (
     goto :wait_server
 )
 
-python wrapper_copilot.py copilot
+python wrapper.py copilot
 if %errorlevel% neq 0 (
     echo.
     echo   Agent exited unexpectedly. Check the output above.
