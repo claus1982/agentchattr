@@ -23,6 +23,9 @@ class AgentTrigger:
                 "available": is_online(name),
                 "busy": is_active(name),
                 "label": info["label"],
+                "display_name": info.get("display_name", info["label"]),
+                "provider": info.get("provider", ""),
+                "model": info.get("model", ""),
                 "color": info["color"],
                 "role": get_role(name),
             }

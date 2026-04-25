@@ -27,6 +27,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 SERVER_NAME = "agentchattr"
 
@@ -361,15 +363,54 @@ def _build_provider_launch(
     )
 
     launch_args = [*mcp_args, *extra_args]
+
+    # Codex wrappers are expected to run autonomously inside agentchattr.
+    # If the interactive CLI stops for MCP approvals, the planner cannot
+    # recover because the agent never reaches its session tools. Default to
+    # non-interactive approvals and workspace-write sandbox unless the caller
+    # already supplied an explicit policy.
+    if agent == "codex":
+        has_approval_override = any(
+            arg in ("-a", "--ask-for-approval") or str(arg).startswith("--ask-for-approval=")
+            for arg in launch_args
+        )
+        if not has_approval_override:
+            approval_policy = str(agent_cfg.get("ask_for_approval", "never")).strip()
+            if approval_policy:
+                launch_args = ["-a", approval_policy, *launch_args]
+
+        has_sandbox_override = any(
+            arg in ("-s", "--sandbox", "--full-auto", "--dangerously-bypass-approvals-and-sandbox")
+            or str(arg).startswith("--sandbox=")
+            for arg in launch_args
+        )
+        if not has_sandbox_override:
+            sandbox_mode = str(agent_cfg.get("sandbox", "workspace-write")).strip()
+            if sandbox_mode:
+                launch_args = ["-s", sandbox_mode, *launch_args]
+
     launch_env = dict(env)
 
     return launch_args, launch_env, inject_env, settings_path
 
 
-def _register_instance(server_port: int, base: str, label: str | None = None) -> dict:
+def _register_instance(
+    server_port: int,
+    base: str,
+    label: str | None = None,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+) -> dict:
     import urllib.request
 
-    reg_body = json.dumps({"base": base, "label": label}).encode()
+    payload = {"base": base, "label": label}
+    if provider:
+        payload["provider"] = provider
+    if model:
+        payload["model"] = model
+
+    reg_body = json.dumps(payload).encode()
     reg_req = urllib.request.Request(
         f"http://127.0.0.1:{server_port}/api/register",
         method="POST",
@@ -385,6 +426,61 @@ def _auth_headers(token: str, *, include_json: bool = False) -> dict[str, str]:
     if include_json:
         headers["Content-Type"] = "application/json"
     return headers
+
+
+def _extract_cli_model(extra_args: list[str]) -> str:
+    for idx, arg in enumerate(extra_args):
+        if arg == "--model" and idx + 1 < len(extra_args):
+            return str(extra_args[idx + 1]).strip()
+        if isinstance(arg, str) and arg.startswith("--model="):
+            return arg.split("=", 1)[1].strip()
+        if arg == "-m" and idx + 1 < len(extra_args):
+            return str(extra_args[idx + 1]).strip()
+    return ""
+
+
+def _dismiss_codex_update(version_file: Path | None = None) -> str | None:
+    """Best-effort: persist the current Codex release as dismissed.
+
+    Codex stores update-check state in ~/.codex/version.json. When
+    latest_version is newer than the installed CLI and dismissed_version is
+    unset, the interactive launcher blocks on an update prompt. Wrappers need
+    Codex to land directly in the composer, so mark the current latest version
+    as dismissed before launching.
+    """
+    target = version_file or (Path.home() / ".codex" / "version.json")
+    if not target.exists():
+        return None
+
+    try:
+        data = json.loads(target.read_text("utf-8-sig"))
+    except Exception:
+        return None
+
+    latest_version = str(data.get("latest_version", "")).strip()
+    if not latest_version:
+        return None
+
+    dismissed_version = data.get("dismissed_version")
+    if isinstance(dismissed_version, str) and dismissed_version.strip() == latest_version:
+        return None
+
+    data["dismissed_version"] = latest_version
+    try:
+        target.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
+    except Exception:
+        return None
+
+    return latest_version
+
+
+def _resolve_enter_backend(agent: str, agent_cfg: dict) -> str:
+    configured = str(agent_cfg.get("enter_backend", "")).strip()
+    if configured:
+        return configured
+    if sys.platform == "win32" and agent == "codex":
+        return "wm_setfocus"
+    return "console_input"
 
 
 # ---------------------------------------------------------------------------
@@ -451,101 +547,160 @@ def _report_rule_sync(server_port: int, agent_name: str, epoch: int, token: str 
         pass
 
 
+def _ack_queue_prefix(queue_file: Path, consumed_text: str):
+    """Remove only the queue prefix that was actually processed.
+
+    This preserves entries appended while the current batch was being handled.
+    If the file changed unexpectedly, leave it untouched so work is retried
+    rather than dropped.
+    """
+    if not consumed_text:
+        return
+
+    try:
+        current_text = queue_file.read_text("utf-8") if queue_file.exists() else ""
+    except Exception:
+        return
+
+    if current_text.startswith(consumed_text):
+        queue_file.write_text(current_text[len(consumed_text):], "utf-8")
+
+
+def _process_queue_once(get_identity_fn, inject_fn, *, is_multi_instance: bool = False,
+                        trigger_flag=None, server_port: int = 8300, agent_name: str = "",
+                        get_token_fn=None, refresh_interval: int = 10) -> bool:
+    """Process at most one queue batch and keep it pending until injection works."""
+    _, queue_file = get_identity_fn()
+    if not queue_file.exists() or queue_file.stat().st_size <= 0:
+        return False
+
+    queued_text = queue_file.read_text("utf-8")
+    if not queued_text:
+        return False
+
+    lines = queued_text.splitlines()
+    has_trigger = False
+    channel = "general"
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        has_trigger = True
+        if isinstance(data, dict) and "channel" in data:
+            channel = data["channel"]
+
+    if not has_trigger:
+        _ack_queue_prefix(queue_file, queued_text)
+        return False
+
+    # Signal activity BEFORE injecting — covers the thinking phase
+    if trigger_flag is not None:
+        trigger_flag[0] = True
+    time.sleep(0.5)
+
+    job_id = None
+    custom_prompt = ""
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+            if isinstance(data, dict) and "job_id" in data:
+                job_id = data["job_id"]
+            if isinstance(data, dict):
+                raw_prompt = data.get("prompt", "")
+                if isinstance(raw_prompt, str) and raw_prompt.strip():
+                    custom_prompt = raw_prompt.strip()
+        except json.JSONDecodeError:
+            pass
+
+    if custom_prompt:
+        prompt = custom_prompt
+    elif job_id:
+        prompt = f"read job_id={job_id} via mcp. act if needed and reply concisely"
+    else:
+        prompt = f"read #{channel} via mcp. act if needed and reply concisely"
+
+    # Use current identity (may have changed via rename)
+    current_name, _ = get_identity_fn()
+    # Append role if set — check both current name and base name
+    role = _fetch_role(server_port, current_name)
+    if not role and current_name != agent_name:
+        role = _fetch_role(server_port, agent_name)
+    if role:
+        prompt += f"\n\nROLE: {role}"
+
+    # Smart rules injection: first trigger, epoch change, or periodic refresh
+    _token = get_token_fn() if get_token_fn else ""
+    rules_data = _fetch_active_rules(server_port, _token)
+    if trigger_flag is not None:
+        trigger_count = trigger_flag[1] = trigger_flag[1] + 1 if len(trigger_flag) > 1 else 1
+    else:
+        trigger_count = 1
+    if rules_data:
+        # Use server-side refresh_interval (live from settings UI)
+        ri = rules_data.get("refresh_interval", refresh_interval)
+        last_rules_epoch = trigger_flag[2] if trigger_flag is not None and len(trigger_flag) > 2 else 0
+        need_inject = (
+            last_rules_epoch == 0
+            or rules_data["epoch"] != last_rules_epoch
+            or (ri > 0 and trigger_count % ri == 0)
+        )
+        if need_inject:
+            if rules_data["rules"]:
+                rules_text = "; ".join(rules_data["rules"])
+                prompt += f"\n\nRULES:\n{rules_text}"
+            if trigger_flag is not None:
+                while len(trigger_flag) < 3:
+                    trigger_flag.append(0)
+                trigger_flag[2] = rules_data["epoch"]
+            _report_rule_sync(server_port, current_name, rules_data["epoch"], _token)
+
+    if is_multi_instance and (trigger_flag is None or len(trigger_flag) < 4 or trigger_flag[3]):
+        prompt += _IDENTITY_HINT
+        if trigger_flag is not None:
+            while len(trigger_flag) < 4:
+                trigger_flag.append(True)
+            trigger_flag[3] = False
+
+    try:
+        # Flatten to single line — multi-line text triggers paste
+        # detection in CLIs (Claude Code shows "[Pasted text +N]")
+        # which can break injection of long session prompts.
+        inject_fn(prompt.replace("\n", " "))
+    except Exception as exc:
+        print(f"  Queue inject failed for @{current_name}: {exc}")
+        return False
+
+    _ack_queue_prefix(queue_file, queued_text)
+    return True
+
+
 def _queue_watcher(get_identity_fn, inject_fn, *, is_multi_instance: bool = False, trigger_flag=None,
                    server_port: int = 8300, agent_name: str = "", get_token_fn=None,
                    refresh_interval: int = 10):
     """Poll queue file and inject an MCP read task when triggered."""
-    first_mention = True
-    last_rules_epoch = 0  # 0 = unknown/cold start — will inject on first trigger
-    trigger_count = 0
+    watcher_state = trigger_flag if trigger_flag is not None else [False]
+    while len(watcher_state) < 4:
+        watcher_state.append(0 if len(watcher_state) < 3 else True)
+
     while True:
         try:
-            _, queue_file = get_identity_fn()
-            if queue_file.exists() and queue_file.stat().st_size > 0:
-                with open(queue_file, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                queue_file.write_text("", "utf-8")
-
-                has_trigger = False
-                channel = "general"
-                for line in lines:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    has_trigger = True
-                    if isinstance(data, dict) and "channel" in data:
-                        channel = data["channel"]
-
-                if has_trigger:
-                    # Signal activity BEFORE injecting — covers the thinking phase
-                    if trigger_flag is not None:
-                        trigger_flag[0] = True
-                    time.sleep(0.5)
-
-                    # Check if this is a job/activity-scoped trigger
-                    job_id = None
-                    custom_prompt = ""
-                    for line in lines:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            data = json.loads(line)
-                            if isinstance(data, dict) and "job_id" in data:
-                                job_id = data["job_id"]
-                            if isinstance(data, dict):
-                                raw_prompt = data.get("prompt", "")
-                                if isinstance(raw_prompt, str) and raw_prompt.strip():
-                                    custom_prompt = raw_prompt.strip()
-                        except json.JSONDecodeError:
-                            pass
-
-                    if custom_prompt:
-                        prompt = custom_prompt
-                    elif job_id:
-                        prompt = f"use mcp to read job_id={job_id} - you're mentioned in a job thread, take appropriate action and respond"
-                    else:
-                        prompt = f"use mcp to read #{channel} - you're mentioned, take appropriate action and respond"
-
-                    # Use current identity (may have changed via rename)
-                    current_name, _ = get_identity_fn()
-                    # Append role if set — check both current name and base name
-                    role = _fetch_role(server_port, current_name)
-                    if not role and current_name != agent_name:
-                        role = _fetch_role(server_port, agent_name)
-                    if role:
-                        prompt += f"\n\nROLE: {role}"
-
-                    # Smart rules injection: first trigger, epoch change, or periodic refresh
-                    _token = get_token_fn() if get_token_fn else ""
-                    rules_data = _fetch_active_rules(server_port, _token)
-                    trigger_count += 1
-                    if rules_data:
-                        # Use server-side refresh_interval (live from settings UI)
-                        ri = rules_data.get("refresh_interval", refresh_interval)
-                        need_inject = (
-                            last_rules_epoch == 0
-                            or rules_data["epoch"] != last_rules_epoch
-                            or (ri > 0 and trigger_count % ri == 0)
-                        )
-                        if need_inject:
-                            if rules_data["rules"]:
-                                rules_text = "; ".join(rules_data["rules"])
-                                prompt += f"\n\nRULES:\n{rules_text}"
-                            last_rules_epoch = rules_data["epoch"]
-                            _report_rule_sync(server_port, current_name, rules_data["epoch"], _token)
-
-                    if first_mention and is_multi_instance:
-                        prompt += _IDENTITY_HINT
-                        first_mention = False
-                    # Flatten to single line — multi-line text triggers paste
-                    # detection in CLIs (Claude Code shows "[Pasted text +N]")
-                    # which can break injection of long session prompts
-                    inject_fn(prompt.replace("\n", " "))
+            _process_queue_once(
+                get_identity_fn,
+                inject_fn,
+                is_multi_instance=is_multi_instance,
+                trigger_flag=watcher_state,
+                server_port=server_port,
+                agent_name=agent_name,
+                get_token_fn=get_token_fn,
+                refresh_interval=refresh_interval,
+            )
         except Exception:
             pass
 
@@ -587,6 +742,8 @@ def main():
 
     agent = args.agent
     agent_cfg = config.get("agents", {}).get(agent, {})
+    provider_name = str(agent_cfg.get("label", agent.capitalize())).strip()
+    model_name = _extract_cli_model(extra)
     cwd = agent_cfg.get("cwd", ".")
     command = agent_cfg.get("command", agent)
     data_dir = ROOT / config.get("server", {}).get("data_dir", "./data")
@@ -595,7 +752,13 @@ def main():
     mcp_cfg = config.get("mcp", {})
 
     try:
-        registration = _register_instance(server_port, agent, args.label)
+        registration = _register_instance(
+            server_port,
+            agent,
+            args.label,
+            provider=provider_name,
+            model=model_name or None,
+        )
     except Exception as exc:
         print(f"  Registration failed ({exc}).")
         print("  Wrapper cannot continue without a registered identity.")
@@ -711,6 +874,11 @@ def main():
         sys.exit(1)
     command = resolved
 
+    if agent == "codex":
+        dismissed_version = _dismiss_codex_update()
+        if dismissed_version:
+            print(f"  Dismissed Codex update prompt for {dismissed_version}.")
+
     project_dir = (ROOT / cwd).resolve()
 
     # Gemini: ensure the project directory is trusted so MCPs are allowed.
@@ -761,7 +929,13 @@ def main():
             except urllib.error.HTTPError as exc:
                 if exc.code == 409:
                     try:
-                        replacement = _register_instance(server_port, agent, args.label)
+                        replacement = _register_instance(
+                            server_port,
+                            agent,
+                            args.label,
+                            provider=provider_name,
+                            model=model_name or None,
+                        )
                         set_runtime_identity(replacement["name"], replacement["token"])
                         _notify_recovery(data_dir, replacement["name"])
                     except Exception:
@@ -884,10 +1058,13 @@ def main():
         pid_holder=_agent_pid,
         inject_env=inject_env,
         inject_delay=agent_cfg.get("inject_delay", 0.3),
+        auto_allow_agentchattr_mcp=bool(
+            agent_cfg.get("auto_allow_agentchattr_mcp", agent == "codex")
+        ),
     )
     # Windows-only injection tuning (no-op on other platforms).
     if sys.platform == "win32":
-        run_kwargs["enter_backend"] = agent_cfg.get("enter_backend", "console_input")
+        run_kwargs["enter_backend"] = _resolve_enter_backend(agent, agent_cfg)
     if sys.platform != "win32":
         run_kwargs["session_name"] = unix_session_name
 

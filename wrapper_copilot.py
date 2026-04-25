@@ -80,6 +80,30 @@ def _build_role_task_instruction(role: str, *, in_job: bool) -> str:
     )
 
 
+def _is_generic_mcp_read_prompt(prompt: str) -> bool:
+    normalized = " ".join((prompt or "").strip().lower().split())
+    return (
+        normalized.startswith("use mcp to read ")
+        and "you're mentioned" in normalized
+        and "take appropriate action and respond" in normalized
+    )
+
+
+def _derive_task_instruction(role: str, *, custom_prompt: str, trigger_text: str, in_job: bool) -> str:
+    prompt = (custom_prompt or "").strip()
+    if prompt and not _is_generic_mcp_read_prompt(prompt):
+        return prompt
+
+    trigger_text = (trigger_text or "").strip()
+    if trigger_text:
+        return (
+            "Respond to this exact chat assignment. Do not answer with readiness or ask for the task again.\n"
+            f"{trigger_text}"
+        )
+
+    return _build_role_task_instruction(role, in_job=in_job)
+
+
 def _run_prompt_command(command_args: list[str], *, cwd: Path, env: dict[str, str], timeout: int) -> subprocess.CompletedProcess:
     if sys.platform == "win32" and Path(command_args[0]).suffix.lower() in {".cmd", ".bat"}:
         comspec = os.environ.get("ComSpec", "cmd.exe")
@@ -103,6 +127,7 @@ def main():
     from wrapper import (
         _IDENTITY_HINT,
         _auth_headers,
+        _extract_cli_model,
         _fetch_active_rules,
         _fetch_role,
         _register_instance,
@@ -145,11 +170,19 @@ def main():
     base_env = {k: v for k, v in os.environ.items() if k not in strip_vars}
     timeout_seconds = int(agent_cfg.get("prompt_timeout", DEFAULT_TIMEOUT_SECONDS))
     context_messages = int(agent_cfg.get("context_messages", 20))
+    provider_name = str(agent_cfg.get("label", agent.capitalize())).strip()
+    model_name = _extract_cli_model(extra)
     oneshot_profiles_dir = data_dir / "copilot-oneshot-home"
     oneshot_profiles_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        registration = _register_instance(server_port, agent, args.label)
+        registration = _register_instance(
+            server_port,
+            agent,
+            args.label,
+            provider=provider_name,
+            model=model_name or None,
+        )
     except Exception as exc:
         print(f"  Registration failed ({exc}).")
         print("  Is the server running? Start it with: python run.py")
@@ -296,7 +329,7 @@ def main():
             return f"{prefix}{sender}: {text}{attachment_note}"
         return f"{prefix}{sender}:{attachment_note}"
 
-    def build_prompt(*, channel: str, job_id: int | None, task_instruction: str, role: str, rules_text: str, include_identity_hint: bool) -> str:
+    def build_prompt(*, channel: str, job_id: int | None, task_instruction: str, trigger_text: str, role: str, rules_text: str, include_identity_hint: bool) -> str:
         current_name = get_name()
         role_key = (role or "").strip().lower()
         if job_id is not None:
@@ -320,6 +353,7 @@ def main():
         recent_context = "\n".join(context_lines).strip() or "(no recent chat context available)"
         latest_message = context_lines[-1] if context_lines else "(no latest message available)"
         latest_message = _clip_text(latest_message, 1200)
+        trigger_text = _clip_text((trigger_text or "").strip(), 1200)
         rules_text = _clip_text(rules_text, MAX_RULES_CHARS)
 
         parts = [
@@ -349,6 +383,8 @@ def main():
             )
         elif role_key in {"reviewer", "challenger"}:
             parts.append("Critique output contract: name one concrete issue or one concrete validation step for the current slice.")
+        if trigger_text:
+            parts.append(f"Primary trigger message: {trigger_text}")
         parts.append(f"Task: {task_instruction}")
         parts.append(f"The latest message you must answer is: {latest_message}")
         parts.append("Follow the latest message exactly when it contains a direct instruction.")
@@ -421,7 +457,13 @@ def main():
             except urllib.error.HTTPError as exc:
                 if exc.code == 409:
                     try:
-                        replacement = _register_instance(server_port, agent, args.label)
+                        replacement = _register_instance(
+                            server_port,
+                            agent,
+                            args.label,
+                            provider=provider_name,
+                            model=model_name or None,
+                        )
                         set_identity(replacement["name"], replacement["token"])
                         print(f"  Re-registered as: {replacement['name']}")
                     except Exception:
@@ -461,6 +503,7 @@ def main():
                     channel = "general"
                     job_id = None
                     custom_prompt = ""
+                    trigger_text = ""
                     for line in lines:
                         line = line.strip()
                         if not line:
@@ -477,16 +520,21 @@ def main():
                             raw_prompt = data.get("prompt", "")
                             if isinstance(raw_prompt, str) and raw_prompt.strip():
                                 custom_prompt = raw_prompt.strip()
+                            raw_text = data.get("text", "")
+                            if isinstance(raw_text, str) and raw_text.strip():
+                                trigger_text = raw_text.strip()
 
                     if has_trigger:
                         role = _fetch_role(server_port, current_name)
                         if not role and current_name != agent:
                             role = _fetch_role(server_port, agent)
 
-                        if custom_prompt:
-                            task_instruction = custom_prompt
-                        else:
-                            task_instruction = _build_role_task_instruction(role, in_job=job_id is not None)
+                        task_instruction = _derive_task_instruction(
+                            role,
+                            custom_prompt=custom_prompt,
+                            trigger_text=trigger_text,
+                            in_job=job_id is not None,
+                        )
 
                         current_token = get_token()
                         rules_data = _fetch_active_rules(server_port, current_token)
@@ -513,6 +561,7 @@ def main():
                             channel=channel,
                             job_id=job_id,
                             task_instruction=task_instruction,
+                            trigger_text=trigger_text,
                             role=role,
                             rules_text=rules_text,
                             include_identity_hint=include_identity_hint,

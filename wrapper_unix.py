@@ -93,6 +93,7 @@ def run_agent(
     session_name=None,
     inject_env=None,
     inject_delay: float = 0.3,
+    auto_allow_agentchattr_mcp: bool = False,
 ):
     """Run agent inside a tmux session, inject via tmux send-keys."""
     _check_tmux()

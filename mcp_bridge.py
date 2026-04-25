@@ -26,6 +26,8 @@ registry = None       # set by run.py — RuntimeRegistry instance
 config = None         # set by run.py — full config.toml dict
 router = None         # set by run.py — Router instance
 agents = None         # set by run.py — AgentManager instance
+session_store = None  # set by run.py — SessionStore instance
+session_engine = None  # set by run.py — SessionEngine instance
 _presence: dict[str, float] = {}
 _activity: dict[str, bool] = {}   # True = screen changed on last poll
 _activity_ts: dict[str, float] = {}  # timestamp of last active=True heartbeat
@@ -113,6 +115,9 @@ _MCP_INSTRUCTIONS = (
     "That read returns a header entry first, including the job title and body, followed by the thread messages. "
     "Then use chat_send(job_id=N, message='...') to reply within it. "
     "Job conversations are separate from the main timeline — your response should go to the job, not the channel.\n\n"
+    "Sessions are the structured multi-agent work loops. Use session_active(channel='...') to inspect whether a session is already running. "
+    "If there is no active session and you have a concrete next cycle, use session_start(sender='your_name', template_id='...', goal='...', channel='...') "
+    "to launch it directly without waiting for the web UI.\n\n"
     "CRITICAL — Proposing Jobs:\n"
     "Agents must ONLY propose jobs using chat_propose_job when explicitly asked by the user, OR when the request is a clearly 'scoped task'. "
     "A task is scoped if it has: 1) Concrete outcome, 2) Specific boundary, 3) Clear done criteria, 4) Explicit owner/intention, and 5) Appropriate size. "
@@ -926,9 +931,98 @@ def chat_summary(
     return f"Unknown action: {action}. Valid actions: read, write."
 
 
+def _auto_cast_session_roles(roles: list[str], online_agents: list[str]) -> dict:
+    cast = {}
+    used = set()
+
+    for role in roles:
+        if role in online_agents and role not in used:
+            cast[role] = role
+            used.add(role)
+
+    available = [agent for agent in online_agents if agent not in used]
+    for role in roles:
+        if role in cast:
+            continue
+        if not available:
+            available = [agent for agent in online_agents if agent not in used] or list(online_agents)
+        if not available:
+            return {}
+        agent = available.pop(0)
+        cast[role] = agent
+        used.add(agent)
+
+    return cast
+
+
+def session_active(channel: str = "general") -> str:
+    """Inspect the active session for a channel, plus the most recent prior session if idle."""
+    if not session_engine or not session_store:
+        return json.dumps({"active": None, "last_session": None})
+
+    active = session_engine.get_active(channel)
+    sessions = session_store.list_all(channel=channel)
+    last_session = max(
+        sessions,
+        key=lambda item: float(item.get("updated_at") or item.get("started_at") or 0.0),
+        default=None,
+    )
+    return json.dumps({"active": active, "last_session": last_session}, ensure_ascii=False)
+
+
+def session_start(
+    sender: str,
+    template_id: str,
+    goal: str = "",
+    channel: str = "general",
+    cast: dict | None = None,
+    ctx: Context | None = None,
+) -> str:
+    """Start a structured multi-agent session from an MCP client.
+
+    If cast is omitted, roles are auto-assigned from the currently active agents.
+    """
+    sender, err = _resolve_tool_identity(sender, ctx, field_name="sender", required=True)
+    if err:
+        return err
+    if not session_engine or not session_store or not store:
+        return "Error: sessions are not configured."
+
+    template_id = (template_id or "").strip()
+    channel = (channel or "general").strip() or "general"
+    if not template_id:
+        return "Error: template_id is required."
+
+    tmpl = session_store.get_template(template_id)
+    if not tmpl:
+        return f"Error: unknown template: {template_id}"
+
+    effective_cast = dict(cast or {})
+    if not effective_cast:
+        online = registry.get_active_names() if registry else []
+        effective_cast = _auto_cast_session_roles(tmpl.get("roles", []), online)
+        if not effective_cast:
+            return "Error: not enough agents online to fill all roles."
+
+    session = session_engine.start_session(template_id, channel, effective_cast, sender, goal)
+    if not session:
+        return "Error: could not start session (one may already be active)."
+
+    store.add(
+        sender="system",
+        text=f"Session started: {tmpl.get('name', template_id)}",
+        msg_type="session_start",
+        channel=channel,
+        metadata={"template_id": template_id, "goal": goal, "session_id": session["id"]},
+    )
+    session_engine.emit_current_phase_banner(session)
+    return json.dumps(session_engine.get_active(channel) or session, ensure_ascii=False)
+
+
 _ALL_TOOLS = [
     chat_send, chat_read, chat_resync, chat_join, chat_who, chat_rules, chat_decision,
     chat_channels, chat_set_hat, chat_claim, chat_summary, chat_propose_job,
+    session_active, session_start,
 ]
 
 

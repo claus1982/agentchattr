@@ -24,6 +24,8 @@ class Instance:
     slot: int       # 1, 2, 3...
     label: str      # "Gemini", "Gemini 2", or human-set custom
     color: str      # hex color (derived from base + slot)
+    provider: str = ""
+    model: str = ""
     identity_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     token: str = field(default_factory=lambda: secrets.token_hex(16))
     epoch: int = 1
@@ -90,7 +92,14 @@ class RuntimeRegistry:
 
     # --- Registration ---
 
-    def register(self, base: str, label: str | None = None) -> dict | None:
+    def register(
+        self,
+        base: str,
+        label: str | None = None,
+        *,
+        provider: str | None = None,
+        model: str | None = None,
+    ) -> dict | None:
         """Register a new instance of `base`. Returns slot info or None if unknown base.
 
         When a 2nd instance registers, slot 1 is renamed from 'base' to 'base-1'
@@ -134,6 +143,8 @@ class RuntimeRegistry:
             name = base if slot == 1 else f"{base}-{slot}"
             base_cfg = self._bases[base]
             color = _derive_color(base_cfg.get("color", "#888"), slot)
+            provider_name = str(provider or base_cfg.get("label", base.capitalize())).strip()
+            model_name = str(model or "").strip()
 
             if label:
                 lbl = label
@@ -146,7 +157,16 @@ class RuntimeRegistry:
             # recovery/reclaim still uses chat_claim, but normal startup should
             # not block on a manual confirmation step.
             state = "active"
-            inst = Instance(name=name, base=base, slot=slot, label=lbl, color=color, state=state)
+            inst = Instance(
+                name=name,
+                base=base,
+                slot=slot,
+                label=lbl,
+                color=color,
+                provider=provider_name,
+                model=model_name,
+                state=state,
+            )
             self._instances[name] = inst
             result = _inst_dict(inst, include_token=True)
             if renamed_slot1:
@@ -388,10 +408,18 @@ class RuntimeRegistry:
             return {n: _inst_dict(i) for n, i in self._instances.items()}
 
     def get_agent_config(self) -> dict[str, dict]:
-        """For WebSocket 'agents' message: {name: {color, label, base, state}}."""
+        """For WebSocket 'agents' message: {name: {color, label, base, state, display_name}}."""
         with self._lock:
             return {
-                n: {"color": i.color, "label": i.label, "base": i.base, "state": i.state}
+                n: {
+                    "color": i.color,
+                    "label": i.label,
+                    "base": i.base,
+                    "state": i.state,
+                    "provider": i.provider,
+                    "model": i.model,
+                    "display_name": _display_name_for(i),
+                }
                 for n, i in self._instances.items()
             }
 
@@ -569,12 +597,41 @@ def _inst_dict(inst: Instance, include_token: bool = False) -> dict:
         "identity_id": inst.identity_id,
         "name": inst.name, "base": inst.base, "slot": inst.slot,
         "label": inst.label, "color": inst.color, "state": inst.state,
+        "provider": inst.provider, "model": inst.model,
+        "display_name": _display_name_for(inst),
         "epoch": inst.epoch,
         "registered_at": inst.registered_at,
     }
     if include_token:
         d["token"] = inst.token
     return d
+
+
+def _display_name_for(inst: Instance) -> str:
+    primary = _normalize_display_text(inst.label or inst.name)
+    qualifier = _normalize_model_text(inst.model) or _normalize_display_text(inst.provider or inst.base)
+    if qualifier and qualifier.lower() != primary.lower():
+        return f"{primary} ({qualifier})"
+    return primary
+
+
+def _normalize_display_text(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    if text == text.lower():
+        words = text.replace("_", " ").replace("-", " ").split()
+        return " ".join(word.capitalize() for word in words)
+    return text
+
+
+def _normalize_model_text(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    if text.lower().startswith("gpt-"):
+        return text.upper()
+    return _normalize_display_text(text)
 
 
 def _derive_color(base_hex: str, slot: int) -> str:

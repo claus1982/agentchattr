@@ -286,12 +286,12 @@ function updateSessionBar() {
     }
     if (endBtn) endBtn.style.display = '';
 
-    const waitingAgent = s.current_agent || s.waiting_on;
+    const waitingAgent = s.current_agent_display || s.waiting_on_display || _displayAgentName(s.current_agent || s.waiting_on, s.current_role || '');
     if (s.state === 'waiting' && waitingAgent) {
         waitingEl.textContent = `Waiting for ${waitingAgent}`;
         waitingEl.style.display = '';
     } else if (s.state === 'paused') {
-        waitingEl.textContent = 'Paused';
+        waitingEl.textContent = waitingAgent ? `Paused on ${waitingAgent}` : 'Paused';
         waitingEl.style.display = '';
     } else {
         waitingEl.style.display = 'none';
@@ -306,6 +306,16 @@ function jumpToSessionChannel() {
 // ---------------------------------------------------------------------------
 // Cast helpers
 // ---------------------------------------------------------------------------
+
+function _displayAgentName(name, fallbackRole = '') {
+    if (window.getAgentDisplayName && name) {
+        return window.getAgentDisplayName(name);
+    }
+    if (fallbackRole) {
+        return fallbackRole.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+    return name || '';
+}
 
 function _getAvailableAgents() {
     return Object.entries(window.agentConfig || {})
@@ -341,7 +351,7 @@ function buildSessionCastEditor(tmpl, cast, assignees) {
         return (tmpl.roles || []).map(role => {
             const assigned = cast ? cast[role] : '';
             const options = assignees.map(a =>
-                `<option value="${window.escapeHtml(a)}" ${a === assigned ? 'selected' : ''}>${window.escapeHtml(a)}</option>`
+                `<option value="${window.escapeHtml(a)}" ${a === assigned ? 'selected' : ''}>${window.escapeHtml(_displayAgentName(a))}</option>`
             ).join('');
             return `<div class="session-cast-row">
                 <span class="session-cast-role">${window.escapeHtml(role)}</span>
@@ -354,7 +364,7 @@ function buildSessionCastEditor(tmpl, cast, assignees) {
         const participantRows = (phase.participants || []).map(role => {
             const assigned = cast ? cast[role] : '';
             const options = assignees.map(a =>
-                `<option value="${window.escapeHtml(a)}" ${a === assigned ? 'selected' : ''}>${window.escapeHtml(a)}</option>`
+                `<option value="${window.escapeHtml(a)}" ${a === assigned ? 'selected' : ''}>${window.escapeHtml(_displayAgentName(a))}</option>`
             ).join('');
             return `<div class="session-cast-row">
                 <span class="session-cast-role">${window.escapeHtml(role)}</span>
@@ -397,7 +407,7 @@ function showSessionLauncher() {
     // "Design a session" card -- lets user describe what they want and pick an agent to draft it
     const agents = _getAvailableAgents();
     const agentOptions = agents.map(a =>
-        `<option value="${window.escapeHtml(a)}">${window.escapeHtml(a)}</option>`
+        `<option value="${window.escapeHtml(a)}">${window.escapeHtml(_displayAgentName(a))}</option>`
     ).join('');
     const designCard = `
         <div class="session-tmpl-card session-design-card">

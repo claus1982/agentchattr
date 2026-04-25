@@ -229,7 +229,7 @@ function getJobRecipientOptions() {
         if (cfg.state === 'pending') continue;
         opts.push({
             name,
-            label: cfg.label || name,
+            label: window.getAgentDisplayName ? window.getAgentDisplayName(name) : (cfg.display_name || cfg.label || name),
             color: cfg.color || 'var(--accent)',
         });
     }
@@ -1536,7 +1536,7 @@ function showConvertToJobModal(msgId) {
         const opt = document.createElement('option');
         opt.value = name;
         const cfg = window.agentConfig[name];
-        opt.textContent = cfg?.label || name;
+        opt.textContent = window.getAgentDisplayName ? window.getAgentDisplayName(name) : (cfg?.display_name || cfg?.label || name);
         if (name === defaultAgent) opt.selected = true;
         selectEl.appendChild(opt);
     }

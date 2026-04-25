@@ -47,6 +47,16 @@ Object.defineProperty(window, '_lastMentionedAgent', {
     set(v) { _lastMentionedAgent = v; },
 });
 
+function getAgentDisplayName(sender) {
+    const rawName = String(sender || '');
+    const lowered = rawName.toLowerCase();
+    const resolved = resolveAgent(lowered) || lowered;
+    const cfg = agentConfig[resolved] || agentConfig[lowered];
+    return cfg?.display_name || cfg?.label || rawName;
+}
+
+window.getAgentDisplayName = getAgentDisplayName;
+
 // --- Drag-scroll for overflow containers ---
 function enableDragScroll(el) {
     let isDown = false, startX, scrollLeft;
@@ -118,7 +128,7 @@ function buildSoundSettings() {
         label.className = 'sound-label';
         label.textContent = name === 'default' ? 'Default sound'
             : name === 'cross-channel' ? 'Background alerts'
-            : (agentConfig[name]?.label || name);
+            : getAgentDisplayName(name);
         const select = document.createElement('select');
         select.className = 'sound-select';
         select.dataset.agent = name;
@@ -150,7 +160,6 @@ function buildSoundSettings() {
                 soundCache[val].play().catch(() => {});
             }
         });
-        row.appendChild(label);
         row.appendChild(select);
         container.appendChild(row);
     }
@@ -793,6 +802,7 @@ function appendMessage(msg) {
         const avatarHtml = `<div class="avatar-wrap" data-agent="${escapeHtml(agentKey)}"><div class="avatar" style="background-color: ${senderColor}">${getAvatarSvg(msg.sender)}</div>${hatHtml}</div>`;
 
         const statusLabel = todoStatusLabel(todoStatus);
+        const senderDisplayName = getAgentDisplayName(msg.sender);
         el.dataset.rawText = msg.text;
         const senderRole = _agentRoles[msg.sender] || '';
         const roleClass = senderRole ? 'bubble-role has-role' : 'bubble-role';
@@ -810,7 +820,7 @@ function appendMessage(msg) {
                 ).join('') + '</div>';
             }
         }
-        el.innerHTML = `<div class="todo-strip"></div>${isSelf ? '' : avatarHtml}<div class="chat-bubble" style="--bubble-color: ${senderColor}">${replyHtml}<div class="bubble-header"><span class="msg-sender" style="color: ${senderColor}">${escapeHtml(msg.sender)}</span>${rolePillHtml}<span class="msg-time">${msg.time || ''}</span></div><div class="msg-text">${textHtml}</div>${choicesHtml}${attachmentsHtml}<button class="convert-job-pill" onclick="startJobFromMessage(${msg.id}); event.stopPropagation();" title="Convert to job">convert to job</button><button class="bubble-copy" onclick="copyMessage(${msg.id}, event)" title="Copy message"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div><div class="msg-actions"><button class="reply-btn" onclick="startReply(${msg.id}, event)">reply</button><button class="todo-hint" onclick="todoCycle(${msg.id}); event.stopPropagation();">${statusLabel}</button><button class="delete-btn" onclick="deleteClick(${msg.id}, event)" title="Delete">del</button></div>`;
+        el.innerHTML = `<div class="todo-strip"></div>${isSelf ? '' : avatarHtml}<div class="chat-bubble" style="--bubble-color: ${senderColor}">${replyHtml}<div class="bubble-header"><span class="msg-sender" style="color: ${senderColor}">${escapeHtml(senderDisplayName)}</span>${rolePillHtml}<span class="msg-time">${msg.time || ''}</span></div><div class="msg-text">${textHtml}</div>${choicesHtml}${attachmentsHtml}<button class="convert-job-pill" onclick="startJobFromMessage(${msg.id}); event.stopPropagation();" title="Convert to job">convert to job</button><button class="bubble-copy" onclick="copyMessage(${msg.id}, event)" title="Copy message"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div><div class="msg-actions"><button class="reply-btn" onclick="startReply(${msg.id}, event)">reply</button><button class="todo-hint" onclick="todoCycle(${msg.id}); event.stopPropagation();">${statusLabel}</button><button class="delete-btn" onclick="deleteClick(${msg.id}, event)" title="Delete">del</button></div>`;
         if (todoStatus) el.classList.add('msg-todo', `msg-todo-${todoStatus}`);
         if (msg.metadata?.session_output) el.classList.add('session-output');
 
@@ -1140,7 +1150,7 @@ function buildStatusPills() {
         pill.id = `status-${name}`;
         pill.title = `@${name}`;  // Tooltip: canonical name for manual @-typing
         pill.style.setProperty('--agent-color', colorOverrides[name] || cfg.color || '#4ade80');
-        pill.innerHTML = `<span class="status-dot"></span><span class="status-label">${escapeHtml(cfg.label || name)}</span>`;
+        pill.innerHTML = `<span class="status-dot"></span><span class="status-label">${escapeHtml(getAgentDisplayName(name))}</span>`;
         // Left-click to toggle pill popover (rename + role + color)
         pill.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -2109,7 +2119,7 @@ function getMentionCandidates() {
     const candidates = [];
     for (const [name, cfg] of Object.entries(agentConfig)) {
         if (cfg.state === 'pending') continue;
-        candidates.push({ name, label: cfg.label || name, color: cfg.color });
+        candidates.push({ name, label: getAgentDisplayName(name), color: cfg.color });
     }
     candidates.push({ name: 'all agents', label: 'all agents', color: 'var(--accent)' });
     return candidates;
@@ -2923,7 +2933,7 @@ function buildMentionToggles() {
         const btn = document.createElement('button');
         btn.className = 'mention-toggle';
         btn.dataset.agent = name;
-        btn.textContent = `@${cfg.label || name}`;
+        btn.textContent = `@${getAgentDisplayName(name)}`;
         btn.title = `@${name}`;  // Tooltip: canonical name
         btn.style.setProperty('--agent-color', colorOverrides[name] || cfg.color);
         // Restore active state for mentions that survived the rebuild

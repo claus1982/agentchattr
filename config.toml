@@ -18,6 +18,9 @@ command = "codex"
 cwd = "../../Desktop/Routify"
 color = "#10a37f"
 label = "Codex"
+ask_for_approval = "never"
+sandbox = "workspace-write"
+auto_allow_agentchattr_mcp = true
 
 [agents.gemini]
 command = "gemini"
@@ -85,6 +88,21 @@ max_agent_hops = 4
 [mcp]
 http_port = 8200
 sse_port = 8201
+
+[sessions]
+waiting_retrigger_seconds = 45
+watchdog_poll_seconds = 15
+compact_prompts = true
+non_productive_loop_enabled = true
+non_productive_loop_limit = 2
+planner_review_enabled = true
+planner_review_idle_seconds = 180
+planner_review_repeat_seconds = 300
+planner_autonomy_enabled = true
+planner_autonomy_idle_seconds = 300
+planner_autonomy_repeat_seconds = 600
+planner_autonomy_template_id = "premium-ui-remediation"
+planner_autonomy_goal = "Keep iterating until the current product work is genuinely excellent, then decide the next high-value evolution."
 
 [images]
 upload_dir = "./uploads"

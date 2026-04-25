@@ -295,7 +295,13 @@ def configure(cfg: dict, session_token: str = ""):
         str(Path(data_dir) / "session_runs.json"),
         templates_dir=str(ROOT / "session_templates"),
     )
-    session_engine = SessionEngine(session_store, store, agents, registry)
+    session_engine = SessionEngine(
+        session_store,
+        store,
+        agents,
+        registry,
+        session_options=cfg.get("sessions", {}),
+    )
     session_store.on_change(_on_session_change)
 
     # Bridge: when ANY message is added to store (including via MCP),
@@ -2086,9 +2092,11 @@ async def register_agent(request: Request):
         return JSONResponse({"error": "invalid JSON"}, status_code=400)
     base = body.get("base", "")
     label = body.get("label")
+    provider = body.get("provider")
+    model = body.get("model")
     if not base:
         return JSONResponse({"error": "base is required"}, status_code=400)
-    result = registry.register(base, label)
+    result = registry.register(base, label, provider=provider, model=model)
     if result is None:
         return JSONResponse({"error": f"unknown base: {base}"}, status_code=400)
     # Touch presence so the instance doesn't immediately time out
@@ -2114,6 +2122,7 @@ async def register_agent(request: Request):
             "name": result["name"],
             "base": base,
             "label": result.get("label", result["name"]),
+            "display_name": result.get("display_name", result.get("label", result["name"])),
             "color": result.get("color", "#888"),
         })
         asyncio.run_coroutine_threadsafe(_broadcast(pending_event), _event_loop)

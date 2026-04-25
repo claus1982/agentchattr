@@ -309,6 +309,11 @@ def inject(text: str, *, delay: float = 0.3, enter_backend: str = "console_input
         time.sleep(0.05)
         _debug_log(f"inject: backend=wm_setfocus len={len(text)}")
         _send_input_enter(hwnd)
+        # Codex on Windows can accept the focus event yet still leave the
+        # composed prompt pending. Follow up with a console Enter so the
+        # already-injected line is actually submitted.
+        _write_key(handle, "\r", True, vk=VK_RETURN, scan=0x1C)
+        _write_key(handle, "\r", False, vk=VK_RETURN, scan=0x1C)
         return
 
     _write_key(handle, "\r", True, vk=VK_RETURN, scan=0x1C)
@@ -365,6 +370,53 @@ kernel32.ReadConsoleOutputW.argtypes = [
 kernel32.ReadConsoleOutputW.restype = wintypes.BOOL
 
 
+def _read_visible_console_char_data(handle) -> bytes | None:
+    csbi = _CONSOLE_SCREEN_BUFFER_INFO()
+    if not kernel32.GetConsoleScreenBufferInfo(handle, ctypes.byref(csbi)):
+        return None
+
+    rect = csbi.srWindow
+    width = rect.Right - rect.Left + 1
+    height = rect.Bottom - rect.Top + 1
+    if width <= 0 or height <= 0:
+        return None
+
+    buffer_size = _COORD(width, height)
+    buffer_coord = _COORD(0, 0)
+    read_rect = _SMALL_RECT(rect.Left, rect.Top, rect.Right, rect.Bottom)
+    char_info_array = (_CHAR_INFO * (width * height))()
+
+    ok = kernel32.ReadConsoleOutputW(
+        handle, char_info_array, buffer_size, buffer_coord,
+        ctypes.byref(read_rect),
+    )
+    if not ok:
+        return None
+
+    import array as _array
+
+    raw = bytes(char_info_array)
+    shorts = _array.array("H")
+    shorts.frombytes(raw)
+    return shorts[::2].tobytes()
+
+
+def _console_text_from_char_data(char_data: bytes | None) -> str:
+    if not char_data:
+        return ""
+    text = char_data.decode("utf-16-le", errors="ignore").replace("\x00", " ")
+    return " ".join(text.split())
+
+
+def _should_auto_allow_agentchattr_mcp(console_text: str) -> bool:
+    normalized = " ".join(console_text.lower().split())
+    return (
+        "allow the agentchattr mcp server to run tool" in normalized
+        and "always allow" in normalized
+        and "cancel" in normalized
+    )
+
+
 def get_activity_checker(pid_holder, agent_name="unknown", trigger_flag=None):
     """Return a callable that detects agent activity by diffing visible characters.
 
@@ -377,9 +429,6 @@ def get_activity_checker(pid_holder, agent_name="unknown", trigger_flag=None):
     message is injected. Forces active state immediately (covers thinking phase).
     pid_holder: not used for screen hashing, but kept for signature compatibility.
     """
-    import array as _array
-    import os as _os
-
     last_chars = [None]  # previous poll's character bytes
     handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
     MIN_CHANGED_CELLS = 10  # idle noise is 2-5 cells; real work is 50+
@@ -396,35 +445,9 @@ def get_activity_checker(pid_holder, agent_name="unknown", trigger_flag=None):
             _consecutive_idle[0] = 0
             _is_active[0] = True
 
-        # Get buffer dimensions
-        csbi = _CONSOLE_SCREEN_BUFFER_INFO()
-        if not kernel32.GetConsoleScreenBufferInfo(handle, ctypes.byref(csbi)):
+        char_data = _read_visible_console_char_data(handle)
+        if char_data is None:
             return _is_active[0]
-
-        rect = csbi.srWindow
-        width = rect.Right - rect.Left + 1
-        height = rect.Bottom - rect.Top + 1
-        if width <= 0 or height <= 0:
-            return _is_active[0]
-
-        # Read visible window
-        buffer_size = _COORD(width, height)
-        buffer_coord = _COORD(0, 0)
-        read_rect = _SMALL_RECT(rect.Left, rect.Top, rect.Right, rect.Bottom)
-        char_info_array = (_CHAR_INFO * (width * height))()
-
-        ok = kernel32.ReadConsoleOutputW(
-            handle, char_info_array, buffer_size, buffer_coord,
-            ctypes.byref(read_rect),
-        )
-        if not ok:
-            return _is_active[0]
-
-        # Extract visible characters only (skip attributes)
-        raw = bytes(char_info_array)
-        shorts = _array.array("H")
-        shorts.frombytes(raw)
-        char_data = shorts[::2].tobytes()
 
         # Count how many characters actually changed
         prev = last_chars[0]
@@ -452,11 +475,33 @@ def get_activity_checker(pid_holder, agent_name="unknown", trigger_flag=None):
     return check
 
 
-def run_agent(command, extra_args, cwd, env, queue_file, agent, no_restart, start_watcher, strip_env=None, pid_holder=None, session_name=None, inject_env=None, inject_delay: float = 0.3, enter_backend: str = "console_input"):
+def run_agent(command, extra_args, cwd, env, queue_file, agent, no_restart, start_watcher, strip_env=None, pid_holder=None, session_name=None, inject_env=None, inject_delay: float = 0.3, enter_backend: str = "console_input", auto_allow_agentchattr_mcp: bool = False):
     """Run agent as a direct subprocess, inject via Win32 console."""
     if inject_env:
         env = {**env, **inject_env}
     start_watcher(lambda text: inject(text, delay=inject_delay, enter_backend=enter_backend))
+
+    if auto_allow_agentchattr_mcp and agent == "codex":
+        def _auto_allow_loop():
+            handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+            last_injected_at = 0.0
+            while True:
+                try:
+                    console_text = _console_text_from_char_data(
+                        _read_visible_console_char_data(handle)
+                    )
+                    if _should_auto_allow_agentchattr_mcp(console_text):
+                        now = time.time()
+                        if now - last_injected_at >= 2.0:
+                            _debug_log("auto_allow_mcp: approving agentchattr MCP prompt")
+                            inject("3", delay=0.05, enter_backend=enter_backend)
+                            last_injected_at = now
+                    time.sleep(0.5)
+                except Exception:
+                    time.sleep(1)
+
+        threading = __import__("threading")
+        threading.Thread(target=_auto_allow_loop, daemon=True).start()
 
     while True:
         try:

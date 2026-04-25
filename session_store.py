@@ -9,6 +9,16 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 
+_DERIVED_SESSION_KEYS = {
+    "total_phases",
+    "phase_name",
+    "current_role",
+    "current_agent",
+    "current_agent_display",
+    "waiting_on_display",
+}
+
+
 class SessionStore:
     def __init__(self, path: str, templates_dir: str | None = None):
         self._path = Path(path)
@@ -50,7 +60,7 @@ class SessionStore:
         try:
             raw = json.loads(self._path.read_text("utf-8"))
             if isinstance(raw, list):
-                self._sessions = raw
+                self._sessions = [self._serialize_session(s) for s in raw if isinstance(s, dict)]
                 if self._sessions:
                     self._next_id = max(s["id"] for s in self._sessions) + 1
         except (json.JSONDecodeError, KeyError):
@@ -58,9 +68,15 @@ class SessionStore:
 
     def _save(self):
         self._path.write_text(
-            json.dumps(self._sessions, indent=2, ensure_ascii=False) + "\n",
+            json.dumps([self._serialize_session(s) for s in self._sessions], indent=2, ensure_ascii=False) + "\n",
             "utf-8",
         )
+
+    def _serialize_session(self, session: dict) -> dict:
+        data = dict(session)
+        for key in _DERIVED_SESSION_KEYS:
+            data.pop(key, None)
+        return data
 
     # --- Templates ---
 
@@ -191,7 +207,7 @@ class SessionStore:
 
     def list_all(self, channel: str | None = None) -> list[dict]:
         with self._lock:
-            result = list(self._sessions)
+            result = [dict(s) for s in self._sessions]
         if channel:
             result = [s for s in result if s.get("channel") == channel]
         return result
@@ -258,6 +274,32 @@ class SessionStore:
             session["updated_at"] = time.time()
             self._save()
             result = dict(session)
+        self._fire("update", result)
+        return result
+
+    def update_cast_agent(self, session_id: int, role: str, agent: str) -> dict | None:
+        """Update the persisted runtime bound to a session role.
+
+        Used when an agent restarts and comes back with a new canonical runtime
+        name while keeping the same logical role label.
+        """
+        with self._lock:
+            session = self._find(session_id)
+            if not session:
+                return None
+
+            cast = session.setdefault("cast", {})
+            old_agent = cast.get(role)
+            if old_agent == agent:
+                return dict(session)
+
+            cast[role] = agent
+            if session.get("waiting_on") == old_agent:
+                session["waiting_on"] = agent
+            session["updated_at"] = time.time()
+            self._save()
+            result = dict(session)
+
         self._fire("update", result)
         return result
 

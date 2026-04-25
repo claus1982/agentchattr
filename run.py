@@ -73,6 +73,8 @@ def main():
     mcp_bridge.config = config
     mcp_bridge.router = app_router
     mcp_bridge.agents = app_agents
+    mcp_bridge.session_engine = session_engine
+    mcp_bridge.session_store = session_store
 
     # Enable cursor and role persistence across restarts
     data_dir = ROOT / config.get("server", {}).get("data_dir", "./data")
@@ -113,6 +115,72 @@ def main():
 
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+    watchdog_cfg = config.get("sessions", {})
+    watchdog_idle_seconds = max(15.0, float(watchdog_cfg.get("waiting_retrigger_seconds", 45)))
+    watchdog_poll_seconds = max(5.0, float(watchdog_cfg.get("watchdog_poll_seconds", 15)))
+    planner_review_enabled = bool(watchdog_cfg.get("planner_review_enabled", True))
+    planner_review_idle_seconds = max(30.0, float(watchdog_cfg.get("planner_review_idle_seconds", 180)))
+    planner_review_repeat_seconds = max(
+        planner_review_idle_seconds,
+        float(watchdog_cfg.get("planner_review_repeat_seconds", 300)),
+    )
+    planner_autonomy_enabled = bool(watchdog_cfg.get("planner_autonomy_enabled", True))
+    planner_autonomy_idle_seconds = max(60.0, float(watchdog_cfg.get("planner_autonomy_idle_seconds", 300)))
+    planner_autonomy_repeat_seconds = max(
+        planner_autonomy_idle_seconds,
+        float(watchdog_cfg.get("planner_autonomy_repeat_seconds", 600)),
+    )
+    planner_autonomy_template_id = str(watchdog_cfg.get("planner_autonomy_template_id", "premium-ui-remediation")).strip() or "premium-ui-remediation"
+    planner_autonomy_goal = str(
+        watchdog_cfg.get(
+            "planner_autonomy_goal",
+            "Keep iterating until the current product work is genuinely excellent, then decide the next high-value evolution.",
+        )
+    ).strip()
+
+    def _session_watchdog():
+        while True:
+            time.sleep(watchdog_poll_seconds)
+            if not session_engine:
+                continue
+            try:
+                recovered = session_engine.recover_stale_waits(max_idle_seconds=watchdog_idle_seconds)
+                if recovered:
+                    logging.getLogger(__name__).info(
+                        "Session watchdog re-triggered %d stalled participant(s)",
+                        recovered,
+                    )
+                if planner_review_enabled:
+                    planner_reviews = session_engine.trigger_periodic_planner_reviews(
+                        idle_seconds=planner_review_idle_seconds,
+                        repeat_seconds=planner_review_repeat_seconds,
+                    )
+                    if planner_reviews:
+                        logging.getLogger(__name__).info(
+                            "Session watchdog woke planner %d time(s)",
+                            planner_reviews,
+                        )
+                if planner_autonomy_enabled:
+                    autonomy_channels = [
+                        str(channel).strip()
+                        for channel in room_settings.get("channels", ["general"])
+                        if str(channel).strip()
+                    ] or ["general"]
+                    planner_autonomy = session_engine.trigger_autonomous_planner_cycles(
+                        channels=autonomy_channels,
+                        template_id=planner_autonomy_template_id,
+                        idle_seconds=planner_autonomy_idle_seconds,
+                        repeat_seconds=planner_autonomy_repeat_seconds,
+                        default_goal=planner_autonomy_goal,
+                    )
+                    if planner_autonomy:
+                        logging.getLogger(__name__).info(
+                            "Session watchdog started planner autonomy review %d time(s)",
+                            planner_autonomy,
+                        )
+            except Exception:
+                logging.getLogger(__name__).exception("Session watchdog failed")
+
     # Capture the event loop for the store→WebSocket bridge
     @app.on_event("startup")
     async def on_startup():
@@ -120,6 +188,7 @@ def main():
         # Resume any sessions that were active before restart
         if session_engine:
             session_engine.resume_active_sessions()
+            threading.Thread(target=_session_watchdog, daemon=True).start()
 
     # Run web server
     import uvicorn
