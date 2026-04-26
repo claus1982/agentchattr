@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,14 @@ MAX_CONTEXT_LINE_CHARS = 700
 MAX_CONTEXT_TOTAL_CHARS = 3500
 MAX_RULES_CHARS = 600
 MAX_PROMPT_CHARS = 6000
+_NON_ACTIONABLE_SESSION_REPLY_RE = re.compile(
+    r"(?:\bready\.?$|\bno task\b|\bno actionable task\b|\bi don['’]?t have (?:a )?concrete task\b|\bmissing the actual task\b|\bwhat (?:would|do) you like me to do\b|\bplease provide the specific (?:change|bug|investigation|repository task|repo task)\b)",
+    re.IGNORECASE,
+)
+_EXACT_OUTPUT_RE = re.compile(
+    r"(?:reply|respond|return|rispondi)\s+(?:only|solo)\s+(?:with|con)\s+['\"`]?([^'\"`\n]+?)['\"`]?\s*$",
+    re.IGNORECASE,
+)
 
 
 def _clip_text(text: str, limit: int) -> str:
@@ -78,6 +87,137 @@ def _build_role_task_instruction(role: str, *, in_job: bool) -> str:
         "If it assigns coordination, monitoring, planning, review, critique, or delegation work, perform that duty directly in chat with concrete next steps and @mentions. "
         "Do not reply with readiness or ask the user to restate the task."
     )
+
+
+def _extract_exact_output(text: str) -> str:
+    normalized = (text or "").strip()
+    if not normalized:
+        return ""
+    match = _EXACT_OUTPUT_RE.search(normalized)
+    if not match:
+        return ""
+    return match.group(1).strip().rstrip(".!?")
+
+
+def _build_direct_task_prompt(
+    task_instruction: str,
+    *,
+    visible_name: str,
+    role: str,
+    include_identity_hint: bool,
+    scope_line: str = "",
+    rules_text: str = "",
+    trigger_text: str = "",
+) -> str:
+    task_text = _clip_text((task_instruction or "").strip(), 2000)
+    if not task_text:
+        return ""
+
+    exact_output = _extract_exact_output(trigger_text) or _extract_exact_output(task_text)
+    if exact_output:
+        return _clip_text(f"Return exactly {exact_output}", MAX_PROMPT_CHARS)
+
+    parts = [
+        "You are GitHub Copilot participating in an agentchattr room.",
+        f"Your visible name in this room is {visible_name}.",
+        "Reply in plain text only and do not prefix your own name.",
+        "The TASK below is authoritative. Execute it now.",
+        "Do not answer with greetings, readiness, no-task language, or requests for more task context.",
+        "If the TASK asks for an exact output string or exact format, return that exact output and nothing else.",
+    ]
+    if scope_line:
+        parts.append(scope_line)
+    if role:
+        parts.append(f"Role: {role}")
+    if rules_text:
+        parts.append(f"Rules: {rules_text}")
+    if include_identity_hint:
+        parts.append(_IDENTITY_HINT.strip())
+    if trigger_text:
+        parts.append(f"Primary trigger message: {trigger_text}")
+    parts.append(f"TASK YOU MUST EXECUTE NOW: {task_text}")
+    return _clip_text("\n\n".join(parts), MAX_PROMPT_CHARS)
+
+
+def _looks_like_session_prompt(prompt: str) -> bool:
+    normalized = (prompt or "").strip().lower()
+    return all(marker in normalized for marker in ("session:", "phase:", "your role:", "task:"))
+
+
+def _sanitize_session_instruction(prompt: str) -> str:
+    kept_lines: list[str] = []
+    for raw_line in (prompt or "").splitlines():
+        line = raw_line.strip()
+        normalized = " ".join(line.lower().split())
+        if normalized.startswith("read recent #") and "reply via chat_send" in normalized:
+            continue
+        kept_lines.append(raw_line.rstrip())
+    return "\n".join(kept_lines).strip()
+
+
+def _extract_prompt_field(prompt: str, prefix: str) -> str:
+    target = f"{prefix}:"
+    for raw_line in (prompt or "").splitlines():
+        line = raw_line.strip()
+        if line.lower().startswith(target.lower()):
+            return line[len(target):].strip()
+    return ""
+
+
+def _session_output_contract(phase_text: str, role_text: str) -> str:
+    phase_key = (phase_text or "").strip().lower()
+    role_key = (role_text or "").strip().lower()
+
+    if phase_key.startswith("intake") or role_key == "delivery_lead":
+        return (
+            "Return exactly these 4 lines:\n"
+            "Client goal: ...\n"
+            "Constraints/success bar: ...\n"
+            "Missing inputs: ...\n"
+            "Decision: Proceed to Plan. or Decision: BLOCKED because ..."
+        )
+    if phase_key.startswith("plan") or role_key == "product_manager":
+        return (
+            "Return exactly these 5 lines:\n"
+            "Slice: ...\n"
+            "Owner: ...\n"
+            "Acceptance criteria: ...\n"
+            "Required evidence: ...\n"
+            "Dependencies/fallback: ..."
+        )
+    if "technical review" in phase_key or role_key == "technical_lead":
+        return (
+            "Return exactly these 4 lines:\n"
+            "Feasibility: ...\n"
+            "Hidden blockers: ...\n"
+            "Execution contract: ...\n"
+            "Decision: Proceed. or Decision: BLOCKED because ..."
+        )
+    if phase_key.startswith("execute") or role_key == "implementation_engineer":
+        return (
+            "Return exactly these 4 lines:\n"
+            "Work performed: ...\n"
+            "Validation: ...\n"
+            "Evidence: ...\n"
+            "Blocker: none or ..."
+        )
+    if phase_key.startswith("assess") or role_key == "qa_reviewer":
+        return (
+            "Return exactly these 4 lines:\n"
+            "Assessment: ...\n"
+            "Evidence check: ...\n"
+            "Gaps: ...\n"
+            "FINAL_STATUS: APPROVED or CONTINUE or BLOCKED"
+        )
+    if phase_key.startswith("command"):
+        return (
+            "Return exactly these 4 lines:\n"
+            "Decision: ...\n"
+            "Owner: ...\n"
+            "Next command: ...\n"
+            "Reason: ..."
+        )
+    return "Reply with the concrete turn output only."
 
 
 def _is_generic_mcp_read_prompt(prompt: str) -> bool:
@@ -329,6 +469,75 @@ def main():
             return f"{prefix}{sender}: {text}{attachment_note}"
         return f"{prefix}{sender}:{attachment_note}"
 
+    def _build_session_task_prompt(*, channel: str, job_id: int | None, session_prompt: str,
+                                   visible_name: str, role: str, rules_text: str,
+                                   include_identity_hint: bool) -> str:
+        if job_id is not None:
+            conversation = read_job_messages(job_id)
+            scope_line = f"Job thread: {job_id}"
+        else:
+            conversation = read_channel_messages(channel)
+            scope_line = f"Channel: #{channel}"
+
+        session_name = _extract_prompt_field(session_prompt, "SESSION") or "Structured session"
+        goal_text = _extract_prompt_field(session_prompt, "GOAL")
+        phase_text = _extract_prompt_field(session_prompt, "PHASE")
+        role_text = _extract_prompt_field(session_prompt, "YOUR ROLE") or role
+        task_text = _extract_prompt_field(session_prompt, "TASK")
+        output_contract = _session_output_contract(phase_text, role_text)
+
+        filtered_messages = [
+            msg for msg in conversation
+            if isinstance(msg, dict)
+            and msg.get("sender") not in {"system", visible_name}
+            and not str(msg.get("sender", "")).strip().lower().startswith("copilot-")
+            and not str((msg.get("text", "") or "")).strip().upper().startswith("ACK_")
+            and not _NON_ACTIONABLE_SESSION_REPLY_RE.search(str(msg.get("text", "") or "").strip())
+            and ((msg.get("text", "") or "").strip() or (msg.get("attachments", []) or []))
+        ]
+        context_lines = [
+            _clip_text(_format_context_line(msg), MAX_CONTEXT_LINE_CHARS)
+            for msg in filtered_messages[-context_messages:]
+        ]
+        context_lines = _trim_context_lines(context_lines, MAX_CONTEXT_TOTAL_CHARS)
+        recent_context = "\n".join(context_lines).strip() or "(no recent chat context available)"
+        rules_text = _clip_text(rules_text, MAX_RULES_CHARS)
+
+        parts = [
+            "You are GitHub Copilot participating in an agentchattr delivery room.",
+            f"Your visible name in this room is {visible_name}.",
+            "Reply in plain text only and do not prefix your own name.",
+            "Do not call MCP tools, do not use external tools, and do not try to read more context.",
+            "The wrapper will post your plain-text reply to the room. Do not attempt chat_send or any MCP action.",
+            "You already have a concrete task for this turn. Perform it now.",
+            "Coordination, planning, review, assessment, and blocker-management turns are real tasks even when no repository edit is requested.",
+            "Do not ask for a repo task when the turn is a delivery-management or review turn.",
+            "Do not answer with readiness, no-task, blocked-for-task, or request-for-task language.",
+            scope_line,
+            f"Session: {session_name}",
+        ]
+        if goal_text:
+            parts.append(f"Goal: {goal_text}")
+        if phase_text:
+            parts.append(f"Phase: {phase_text}")
+        if role_text:
+            parts.append(f"Role: {role_text}")
+        if rules_text:
+            parts.append(f"Rules: {rules_text}")
+        if include_identity_hint:
+            parts.append(_IDENTITY_HINT.strip())
+        if task_text:
+            parts.append(f"Your exact turn deliverable: {task_text}")
+        if output_contract:
+            parts.append(output_contract)
+        if recent_context and recent_context != "(no recent chat context available)":
+            parts.append("Recent conversation:")
+            parts.append(recent_context)
+        parts.append("Produce the actual turn output now. Use the Goal, Phase, Role, and Your exact turn deliverable fields as the task source of truth.")
+
+        prompt = "\n\n".join(parts)
+        return _clip_text(prompt, MAX_PROMPT_CHARS)
+
     def build_prompt(*, channel: str, job_id: int | None, task_instruction: str, trigger_text: str, role: str, rules_text: str, include_identity_hint: bool) -> str:
         current_name = get_name()
         role_key = (role or "").strip().lower()
@@ -351,10 +560,22 @@ def main():
         ]
         context_lines = _trim_context_lines(context_lines, MAX_CONTEXT_TOTAL_CHARS)
         recent_context = "\n".join(context_lines).strip() or "(no recent chat context available)"
-        latest_message = context_lines[-1] if context_lines else "(no latest message available)"
-        latest_message = _clip_text(latest_message, 1200)
+        task_instruction = _clip_text((task_instruction or "").strip(), 1600)
         trigger_text = _clip_text((trigger_text or "").strip(), 1200)
+        latest_message = trigger_text or (context_lines[-1] if context_lines else "(no latest message available)")
+        latest_message = _clip_text(latest_message, 1200)
         rules_text = _clip_text(rules_text, MAX_RULES_CHARS)
+
+        if task_instruction:
+            return _build_direct_task_prompt(
+                task_instruction,
+                visible_name=current_name,
+                role=role,
+                include_identity_hint=include_identity_hint,
+                scope_line=scope_line,
+                rules_text=rules_text,
+                trigger_text=trigger_text,
+            )
 
         parts = [
             "You are GitHub Copilot participating in an agentchattr room.",
@@ -386,6 +607,8 @@ def main():
         if trigger_text:
             parts.append(f"Primary trigger message: {trigger_text}")
         parts.append(f"Task: {task_instruction}")
+        if trigger_text:
+            parts.append("The Primary trigger message below is authoritative. Answer that trigger even if the recent room history contains older unresolved requests.")
         parts.append(f"The latest message you must answer is: {latest_message}")
         parts.append("Follow the latest message exactly when it contains a direct instruction.")
         parts.append("Recent conversation:")
@@ -402,12 +625,12 @@ def main():
         ])
         return _clip_text(prompt, MAX_PROMPT_CHARS)
 
-    def run_copilot_prompt(prompt: str) -> str:
+    def run_copilot_prompt(prompt: str, *, cwd_override: Path | None = None) -> str:
         launch_args, launch_env = get_launch()
         command_args = [resolved_command, *launch_args, "-p", prompt]
         proc = _run_prompt_command(
             command_args,
-            cwd=project_dir,
+            cwd=cwd_override or project_dir,
             env=launch_env,
             timeout=timeout_seconds,
         )
@@ -420,10 +643,13 @@ def main():
 
         return strip_self_prefix(stdout)
 
-    def handle_trigger(prompt: str, *, channel: str, job_id: int | None):
+    def handle_trigger(prompt: str, *, channel: str, job_id: int | None, session_like: bool = False):
         set_working(True)
         try:
-            response = run_copilot_prompt(prompt).strip()
+            response = run_copilot_prompt(
+                prompt,
+                cwd_override=ROOT if session_like else None,
+            ).strip()
             if not response:
                 return
             if job_id is not None:
@@ -529,13 +755,6 @@ def main():
                         if not role and current_name != agent:
                             role = _fetch_role(server_port, agent)
 
-                        task_instruction = _derive_task_instruction(
-                            role,
-                            custom_prompt=custom_prompt,
-                            trigger_text=trigger_text,
-                            in_job=job_id is not None,
-                        )
-
                         current_token = get_token()
                         rules_data = _fetch_active_rules(server_port, current_token)
                         trigger_count += 1
@@ -557,16 +776,48 @@ def main():
                         if first_mention and is_multi_instance:
                             first_mention = False
 
-                        prompt = build_prompt(
+                        session_like_prompt = False
+                        if custom_prompt and not _is_generic_mcp_read_prompt(custom_prompt):
+                            if _looks_like_session_prompt(custom_prompt):
+                                session_like_prompt = True
+                                prompt = _build_session_task_prompt(
+                                    channel=channel,
+                                    job_id=job_id,
+                                    session_prompt=custom_prompt,
+                                    visible_name=current_name,
+                                    role=role,
+                                    rules_text=rules_text,
+                                    include_identity_hint=include_identity_hint,
+                                )
+                            else:
+                                prompt = _build_direct_task_prompt(
+                                    custom_prompt,
+                                    visible_name=current_name,
+                                    role=role,
+                                    include_identity_hint=include_identity_hint,
+                                )
+                        else:
+                            task_instruction = _derive_task_instruction(
+                                role,
+                                custom_prompt=custom_prompt,
+                                trigger_text=trigger_text,
+                                in_job=job_id is not None,
+                            )
+                            prompt = build_prompt(
+                                channel=channel,
+                                job_id=job_id,
+                                task_instruction=task_instruction,
+                                trigger_text=trigger_text,
+                                role=role,
+                                rules_text=rules_text,
+                                include_identity_hint=include_identity_hint,
+                            )
+                        handle_trigger(
+                            prompt,
                             channel=channel,
                             job_id=job_id,
-                            task_instruction=task_instruction,
-                            trigger_text=trigger_text,
-                            role=role,
-                            rules_text=rules_text,
-                            include_identity_hint=include_identity_hint,
+                            session_like=session_like_prompt,
                         )
-                        handle_trigger(prompt, channel=channel, job_id=job_id)
             except Exception:
                 pass
 
