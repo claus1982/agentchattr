@@ -2319,6 +2319,7 @@ async def open_path(body: dict):
 async def get_session_templates():
     if not session_store:
         return JSONResponse({"error": "sessions not configured"}, status_code=500)
+    session_store.refresh_templates()
     return JSONResponse(session_store.get_templates())
 
 
@@ -2341,6 +2342,7 @@ async def get_all_active_sessions():
 async def start_session(request: Request):
     if not session_engine or not session_store:
         return JSONResponse({"error": "sessions not configured"}, status_code=500)
+    session_store.refresh_templates()
     body = await request.json()
     template_id = body.get("template_id", "")
     draft_message_id = body.get("draft_message_id")
@@ -2348,6 +2350,9 @@ async def start_session(request: Request):
     cast = body.get("cast", {})
     goal = body.get("goal", "")
     started_by = body.get("started_by", "user")
+    session_options = dict(body.get("session_options") or {})
+    if "safe_mode" in body:
+        session_options["safe_mode"] = bool(body.get("safe_mode"))
 
     # If running from a draft, load the inline template from message metadata
     tmpl = None
@@ -2365,7 +2370,7 @@ async def start_session(request: Request):
         template_id = tmpl.get("id", f"draft-{draft_message_id}")
         tmpl["id"] = template_id
         tmpl["is_custom"] = True
-        session_store._templates[template_id] = tmpl
+        session_store.register_runtime_template(tmpl)
 
     # Validate template exists
     if not tmpl:
@@ -2384,7 +2389,14 @@ async def start_session(request: Request):
                 status_code=400,
             )
 
-    session = session_engine.start_session(template_id, channel, cast, started_by, goal)
+    session = session_engine.start_session(
+        template_id,
+        channel,
+        cast,
+        started_by,
+        goal,
+        session_options=session_options,
+    )
     if not session:
         return JSONResponse({"error": "could not start session (one may already be active)"}, status_code=409)
 
@@ -2396,7 +2408,8 @@ async def start_session(request: Request):
         channel=channel,
         metadata={"template_id": template_id, "goal": goal, "session_id": session["id"]},
     )
-    session_engine.emit_current_phase_banner(session)
+    if session.get("state") in ("active", "waiting", "paused"):
+        session_engine.emit_current_phase_banner(session)
 
     return JSONResponse(session)
 
@@ -2436,10 +2449,13 @@ async def request_session_draft(request: Request):
         "Respond with a single chat message containing a fenced JSON code block with this exact structure:\n"
         "```session\n"
         '{"name": "...", "description": "...", "roles": ["role1", "role2", ...], '
-        '"phases": [{"name": "...", "participants": ["role1"], "prompt": "...", "is_output": false}, ...]}\n'
+        '"governance": {"lead_role": "...", "planning_role": "...", "executor_roles": ["..."], "review_roles": ["..."]}, '
+        '"phases": [{"name": "...", "participants": ["role1"], "phase_kind": "plan", "prompt": "...", "is_output": false}, ...]}\n'
         "```\n"
         "Rules: max 6 roles, max 6 phases, max 4 participants per phase, max 200 chars per prompt. "
+        "Define one lead_role with command authority. Use phase_kind from: frame, plan, review, execute, assess, summary, decision, other. "
         "Mark exactly one phase as `is_output: true` (the final deliverable). "
+        "If a phase should terminate on a blocker, use `interrupt_when_all_contain` and `interrupt_reason`. "
         f"Keep it focused and sequential. Use the chat_send tool to post your response in the #{channel} channel. "
         "Do NOT respond only in your terminal.",
         channel=channel,

@@ -1,0 +1,73 @@
+{
+  "id": "software-house-delivery",
+  "name": "Northstar Software Delivery",
+  "description": "Client-driven delivery loop with clear command, planning, execution, verification, and blocker escalation.",
+  "roles": [
+    "delivery_lead",
+    "product_manager",
+    "technical_lead",
+    "implementation_engineer",
+    "qa_reviewer"
+  ],
+  "governance": {
+    "lead_role": "delivery_lead",
+    "planning_role": "product_manager",
+    "executor_roles": ["implementation_engineer"],
+    "review_roles": ["technical_lead", "qa_reviewer"],
+    "client_escalation_role": "delivery_lead",
+    "quality_gate_role": "qa_reviewer",
+    "deterministic_phase_kinds": ["frame", "plan", "review", "decision"],
+    "autonomy_contract": "gfe",
+    "client_escalation_threshold": "hard-blocker-only"
+  },
+  "user_required": false,
+  "phases": [
+    {
+      "name": "Intake",
+      "participants": ["delivery_lead"],
+      "phase_kind": "frame",
+      "prompt": "Restate the client goal, constraints, success bar, and any missing inputs. If the brief is partial, infer the safest high-value path and authorize work unless a hard blocker is already proven.",
+      "turn_order": "sequential"
+    },
+    {
+      "name": "Plan",
+      "participants": ["product_manager"],
+      "phase_kind": "plan",
+      "prompt": "Turn the request into one delivery slice with owner, acceptance criteria, evidence, dependencies, and fallback. Resolve ordinary ambiguity inside the room before escalating.",
+      "turn_order": "sequential"
+    },
+    {
+      "name": "Technical Review",
+      "participants": ["technical_lead"],
+      "phase_kind": "review",
+      "prompt": "Challenge the slice for feasibility, architecture, tooling, and hidden blockers. Tighten the execution contract before build starts and keep client escalation reserved for true hard blockers.",
+      "turn_order": "sequential"
+    },
+    {
+      "name": "Execute",
+      "participants": ["implementation_engineer"],
+      "phase_kind": "execute",
+      "prompt": "Build the slice, run validation, produce required evidence, and declare BLOCKER only if a true dependency, permission, or tool failure prevents responsible completion.",
+      "turn_order": "sequential"
+    },
+    {
+      "name": "Assess",
+      "participants": ["qa_reviewer"],
+      "phase_kind": "assess",
+      "prompt": "Assess against acceptance criteria and evidence. End with FINAL_STATUS: APPROVED, CONTINUE, or BLOCKED plus exact gaps and BLOCKER: ... Use BLOCKED only for true client or external blockers.",
+      "turn_order": "sequential",
+      "is_output": true,
+      "complete_when_all_contain": "FINAL_STATUS: APPROVED",
+      "interrupt_when_all_contain": "FINAL_STATUS: BLOCKED",
+      "interrupt_reason": "blocked: human/client action or external dependency required"
+    },
+    {
+      "name": "Command",
+      "participants": ["delivery_lead"],
+      "phase_kind": "decision",
+      "prompt": "If Assess returned CONTINUE, issue the next command, confirm owner, and send the room back to planning. Do not loop a repeated blocker; keep the room moving until a hard blocker is proven.",
+      "turn_order": "sequential",
+      "loop_to_phase": 1
+    }
+  ]
+}

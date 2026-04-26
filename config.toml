@@ -101,8 +101,8 @@ planner_review_repeat_seconds = 300
 planner_autonomy_enabled = true
 planner_autonomy_idle_seconds = 300
 planner_autonomy_repeat_seconds = 600
-planner_autonomy_template_id = "premium-ui-remediation"
-planner_autonomy_goal = "Keep iterating until the current product work is genuinely excellent, then decide the next high-value evolution."
+planner_autonomy_template_id = "software-house-delivery"
+planner_autonomy_goal = "Operate as Northstar Software: accept client requirements, plan, execute, verify, and escalate only missing requirements or irreducible blockers."
 
 [images]
 upload_dir = "./uploads"

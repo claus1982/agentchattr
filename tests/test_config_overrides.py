@@ -45,6 +45,7 @@ class ConfigOverrideTests(unittest.TestCase):
         self.assertEqual(config["server"]["port"], 8300)
         self.assertEqual(config["server"]["data_dir"], str((ROOT / "data").resolve()))
         self.assertEqual(config["images"]["upload_dir"], str((ROOT / "uploads").resolve()))
+        self.assertEqual(config["sessions"]["planner_autonomy_template_id"], "software-house-delivery")
 
     def test_port_env_var_overrides_config(self):
         os.environ["AGENTCHATTR_PORT"] = "8310"

@@ -17,6 +17,7 @@ build/
 .gemini/
 .claude/
 tests/
+artifacts/northstar-governance/
 agents_lineup.svg
 docs/
 goals.py

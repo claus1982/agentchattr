@@ -8,6 +8,21 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+_ALLOWED_PHASE_KINDS = {
+    "frame",
+    "plan",
+    "review",
+    "execute",
+    "assess",
+    "summary",
+    "decision",
+    "other",
+}
+
+_ALLOWED_AUTONOMY_CONTRACTS = {"gfe"}
+
+_ALLOWED_CLIENT_ESCALATION_THRESHOLDS = {"hard-blocker-only", "standard"}
+
 
 _DERIVED_SESSION_KEYS = {
     "total_phases",
@@ -28,6 +43,10 @@ class SessionStore:
         self._lock = threading.Lock()
         self._callbacks: list = []
         self._templates: dict[str, dict] = {}
+        self._template_sources: dict[str, str] = {}
+        self._templates_dir = Path(templates_dir) if templates_dir else None
+        self._custom_templates_path = self._path.parent / "custom_templates.json"
+        self._templates_fingerprint: tuple | None = None
         self._load()
 
         # Warn about legacy file
@@ -35,22 +54,7 @@ class SessionStore:
         if legacy.exists() and legacy != self._path:
             log.info("Ignoring legacy sessions.json; Sessions uses %s", self._path.name)
 
-        if templates_dir:
-            self._load_templates(Path(templates_dir))
-
-        # Load custom (user/agent-created) templates
-        custom_path = self._path.parent / "custom_templates.json"
-        if custom_path.exists():
-            try:
-                custom = json.loads(custom_path.read_text("utf-8"))
-                for tmpl in (custom if isinstance(custom, list) else []):
-                    tid = tmpl.get("id", "")
-                    if tid:
-                        tmpl["is_custom"] = True
-                        self._templates[tid] = tmpl
-                        log.info("Loaded custom template: %s", tid)
-            except (json.JSONDecodeError, KeyError) as exc:
-                log.warning("Failed to load custom templates: %s", exc)
+        self.refresh_templates(force=True)
 
     # --- Persistence ---
 
@@ -80,29 +84,120 @@ class SessionStore:
 
     # --- Templates ---
 
-    def _load_templates(self, directory: Path):
+    def _template_fingerprint(self) -> tuple:
+        builtin = []
+        if self._templates_dir and self._templates_dir.exists():
+            for file_path in sorted(self._templates_dir.glob("*.json")):
+                try:
+                    stat = file_path.stat()
+                    builtin.append((file_path.name, stat.st_mtime_ns, stat.st_size))
+                except OSError:
+                    continue
+
+        custom = None
+        if self._custom_templates_path.exists():
+            try:
+                stat = self._custom_templates_path.stat()
+                custom = (stat.st_mtime_ns, stat.st_size)
+            except OSError:
+                custom = ("error",)
+
+        return (tuple(builtin), custom)
+
+    def _read_templates_from_dir(self, directory: Path | None) -> dict[str, dict]:
+        templates: dict[str, dict] = {}
+        if not directory:
+            return templates
         if not directory.exists():
             log.warning("Session templates directory not found: %s", directory)
-            return
-        for f in sorted(directory.glob("*.json")):
+            return templates
+
+        for file_path in sorted(directory.glob("*.json")):
             try:
-                tmpl = json.loads(f.read_text("utf-8"))
-                tid = tmpl.get("id", f.stem)
+                tmpl = json.loads(file_path.read_text("utf-8"))
+                tid = tmpl.get("id", file_path.stem)
                 tmpl["id"] = tid
                 tmpl.setdefault("is_custom", False)
-                self._templates[tid] = tmpl
-                log.info("Loaded session template: %s", tid)
+                templates[tid] = tmpl
             except (json.JSONDecodeError, KeyError) as exc:
-                log.warning("Failed to load template %s: %s", f.name, exc)
+                log.warning("Failed to load template %s: %s", file_path.name, exc)
+        return templates
+
+    def _read_custom_templates(self) -> dict[str, dict]:
+        templates: dict[str, dict] = {}
+        if not self._custom_templates_path.exists():
+            return templates
+
+        try:
+            custom = json.loads(self._custom_templates_path.read_text("utf-8"))
+            for tmpl in (custom if isinstance(custom, list) else []):
+                tid = tmpl.get("id", "")
+                if not tid:
+                    continue
+                saved = dict(tmpl)
+                saved["is_custom"] = True
+                templates[tid] = saved
+        except (json.JSONDecodeError, KeyError) as exc:
+            log.warning("Failed to load custom templates: %s", exc)
+        return templates
+
+    def refresh_templates(self, *, force: bool = False):
+        fingerprint = self._template_fingerprint()
+        with self._lock:
+            if not force and fingerprint == self._templates_fingerprint:
+                return
+
+        builtin_templates = self._read_templates_from_dir(self._templates_dir)
+        custom_templates = self._read_custom_templates()
+
+        with self._lock:
+            for template_id, source in list(self._template_sources.items()):
+                if source in {"builtin", "custom"}:
+                    self._template_sources.pop(template_id, None)
+                    self._templates.pop(template_id, None)
+
+            for template_id, template in builtin_templates.items():
+                self._templates[template_id] = template
+                self._template_sources[template_id] = "builtin"
+                log.info("Loaded session template: %s", template_id)
+
+            for template_id, template in custom_templates.items():
+                self._templates[template_id] = template
+                self._template_sources[template_id] = "custom"
+                log.info("Loaded custom template: %s", template_id)
+
+            self._templates_fingerprint = fingerprint
 
     def get_templates(self) -> list[dict]:
-        return list(self._templates.values())
+        self.refresh_templates()
+        with self._lock:
+            return [
+                dict(template)
+                for template_id, template in self._templates.items()
+                if self._template_sources.get(template_id) != "runtime"
+            ]
 
     def get_template(self, template_id: str) -> dict | None:
-        return self._templates.get(template_id)
+        self.refresh_templates()
+        with self._lock:
+            tmpl = self._templates.get(template_id)
+            return dict(tmpl) if tmpl else None
+
+    def register_runtime_template(self, tmpl: dict) -> dict:
+        saved = dict(tmpl)
+        template_id = str(saved.get("id", "")).strip()
+        if not template_id:
+            raise ValueError("runtime template id is required")
+        saved["id"] = template_id
+        saved.setdefault("is_custom", True)
+
+        with self._lock:
+            self._templates[template_id] = saved
+            self._template_sources[template_id] = "runtime"
+        return dict(saved)
 
     def save_custom_template(self, tmpl: dict) -> dict:
-        custom_path = self._path.parent / "custom_templates.json"
+        custom_path = self._custom_templates_path
         custom = []
         if custom_path.exists():
             try:
@@ -116,14 +211,16 @@ class SessionStore:
         custom.append(saved)
         custom_path.write_text(json.dumps(custom, indent=2, ensure_ascii=False) + "\n", "utf-8")
         self._templates[saved["id"]] = saved
+        self._template_sources[saved["id"]] = "custom"
+        self._templates_fingerprint = None
         return saved
 
     def delete_custom_template(self, template_id: str) -> bool:
         tmpl = self._templates.get(template_id)
-        if not tmpl or not tmpl.get("is_custom"):
+        if not tmpl or self._template_sources.get(template_id) != "custom":
             return False
 
-        custom_path = self._path.parent / "custom_templates.json"
+        custom_path = self._custom_templates_path
         custom = []
         if custom_path.exists():
             try:
@@ -136,6 +233,8 @@ class SessionStore:
             custom_path.write_text(json.dumps(new_custom, indent=2, ensure_ascii=False) + "\n", "utf-8")
 
         self._templates.pop(template_id, None)
+        self._template_sources.pop(template_id, None)
+        self._templates_fingerprint = None
         return True
 
     # --- Callbacks ---
@@ -155,11 +254,13 @@ class SessionStore:
     # --- Session lifecycle ---
 
     def create(self, template_id: str, channel: str, cast: dict,
-               started_by: str, goal: str = "") -> dict | None:
+               started_by: str, goal: str = "", session_options: dict | None = None) -> dict | None:
         """Create and persist a new session run."""
         tmpl = self._templates.get(template_id)
         if not tmpl:
             return None
+
+        options = dict(session_options or {})
 
         with self._lock:
             # One active session per channel
@@ -183,6 +284,8 @@ class SessionStore:
                 "output_message_id": None,
                 "goal": goal.strip()[:500],
             }
+            if "safe_mode" in options:
+                session["safe_mode"] = bool(options.get("safe_mode"))
             self._next_id += 1
             self._sessions.append(session)
             self._save()
@@ -391,6 +494,58 @@ def validate_session_template(tmpl: dict) -> list[str]:
     roles_set = set(roles) if isinstance(roles, list) else set()
     output_count = 0
 
+    governance = tmpl.get("governance")
+    if governance is not None:
+        if not isinstance(governance, dict):
+            errors.append("'governance' must be an object when provided")
+        else:
+            for key in ("lead_role", "planning_role", "client_escalation_role", "quality_gate_role"):
+                value = governance.get(key)
+                if value is not None:
+                    if not isinstance(value, str):
+                        errors.append(f"'governance.{key}' must be a string")
+                    elif value not in roles_set:
+                        errors.append(f"'governance.{key}' role '{value}' not in roles list")
+            for key in ("executor_roles", "review_roles"):
+                value = governance.get(key)
+                if value is not None:
+                    if not isinstance(value, list):
+                        errors.append(f"'governance.{key}' must be an array")
+                    else:
+                        for role in value:
+                            if role not in roles_set:
+                                errors.append(f"'governance.{key}' role '{role}' not in roles list")
+            deterministic_phase_kinds = governance.get("deterministic_phase_kinds")
+            if deterministic_phase_kinds is not None:
+                if not isinstance(deterministic_phase_kinds, list):
+                    errors.append("'governance.deterministic_phase_kinds' must be an array")
+                else:
+                    for phase_kind in deterministic_phase_kinds:
+                        if not isinstance(phase_kind, str):
+                            errors.append(
+                                "'governance.deterministic_phase_kinds' entries must be strings"
+                            )
+                        elif phase_kind not in _ALLOWED_PHASE_KINDS:
+                            errors.append(
+                                "'governance.deterministic_phase_kinds' entries must be phase kinds"
+                            )
+            autonomy_contract = governance.get("autonomy_contract")
+            if autonomy_contract is not None:
+                if not isinstance(autonomy_contract, str):
+                    errors.append("'governance.autonomy_contract' must be a string")
+                elif autonomy_contract not in _ALLOWED_AUTONOMY_CONTRACTS:
+                    errors.append(
+                        "'governance.autonomy_contract' must be one of ['gfe']"
+                    )
+            client_escalation_threshold = governance.get("client_escalation_threshold")
+            if client_escalation_threshold is not None:
+                if not isinstance(client_escalation_threshold, str):
+                    errors.append("'governance.client_escalation_threshold' must be a string")
+                elif client_escalation_threshold not in _ALLOWED_CLIENT_ESCALATION_THRESHOLDS:
+                    errors.append(
+                        "'governance.client_escalation_threshold' must be one of ['hard-blocker-only', 'standard']"
+                    )
+
     for i, phase in enumerate(phases if isinstance(phases, list) else []):
         if not isinstance(phase, dict):
             errors.append(f"Phase {i + 1}: must be an object")
@@ -410,9 +565,23 @@ def validate_session_template(tmpl: dict) -> list[str]:
             errors.append(f"Phase {i + 1}: prompt too long ({len(prompt)} chars, max 200)")
         if phase.get("is_output"):
             output_count += 1
+        phase_kind = phase.get("phase_kind")
+        if phase_kind is not None:
+            if not isinstance(phase_kind, str):
+                errors.append(f"Phase {i + 1}: 'phase_kind' must be a string")
+            elif phase_kind not in _ALLOWED_PHASE_KINDS:
+                errors.append(
+                    f"Phase {i + 1}: 'phase_kind' must be one of {sorted(_ALLOWED_PHASE_KINDS)}"
+                )
         completion_marker = phase.get("complete_when_all_contain")
         if completion_marker is not None and not isinstance(completion_marker, str):
             errors.append(f"Phase {i + 1}: 'complete_when_all_contain' must be a string")
+        interrupt_marker = phase.get("interrupt_when_all_contain")
+        if interrupt_marker is not None and not isinstance(interrupt_marker, str):
+            errors.append(f"Phase {i + 1}: 'interrupt_when_all_contain' must be a string")
+        interrupt_reason = phase.get("interrupt_reason")
+        if interrupt_reason is not None and not isinstance(interrupt_reason, str):
+            errors.append(f"Phase {i + 1}: 'interrupt_reason' must be a string")
         loop_to_phase = phase.get("loop_to_phase")
         if loop_to_phase is not None:
             if not isinstance(loop_to_phase, int):
