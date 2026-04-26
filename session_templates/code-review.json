@@ -3,29 +3,38 @@
   "name": "Code Review",
   "description": "Structured code review with builder, reviewer, and red team.",
   "roles": ["builder", "reviewer", "red_team", "synthesiser"],
+  "governance": {
+    "lead_role": "synthesiser",
+    "executor_roles": ["builder"],
+    "review_roles": ["reviewer", "red_team"]
+  },
   "user_required": false,
   "phases": [
     {
       "name": "Submit",
       "participants": ["builder"],
+      "phase_kind": "frame",
       "prompt": "Present the code or feature you want reviewed. Explain what changed and why.",
       "turn_order": "sequential"
     },
     {
       "name": "Review",
       "participants": ["reviewer", "red_team"],
+      "phase_kind": "review",
       "prompt": "Review the submission. Identify issues, suggest improvements. Be specific and evidence-based.",
       "turn_order": "sequential"
     },
     {
       "name": "Respond",
       "participants": ["builder"],
+      "phase_kind": "execute",
       "prompt": "Address the feedback. What will you change? What do you disagree with and why?",
       "turn_order": "sequential"
     },
     {
       "name": "Summary",
       "participants": ["synthesiser"],
+      "phase_kind": "summary",
       "prompt": "Summarise: what was agreed, what changes are needed, what remains unresolved.",
       "turn_order": "sequential",
       "is_output": true

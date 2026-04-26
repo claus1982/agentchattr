@@ -3,44 +3,58 @@
   "name": "Premium UI Remediation",
   "description": "Autonomous premium-Android UI pass driven by implementer evidence, planning, critique, and validation.",
   "roles": ["implementer", "planner", "reviewer", "challenger"],
+  "governance": {
+    "lead_role": "planner",
+    "planning_role": "planner",
+    "executor_roles": ["implementer"],
+    "review_roles": ["reviewer", "challenger"]
+  },
   "user_required": false,
   "phases": [
     {
       "name": "Baseline",
       "participants": ["implementer"],
+      "phase_kind": "frame",
       "prompt": "Read the mockups, screenshots, and current Routify.Web UI. Report concrete visual deltas, tool availability, and the best first implementation slice.",
       "turn_order": "sequential"
     },
     {
       "name": "Plan",
       "participants": ["planner"],
+      "phase_kind": "plan",
       "prompt": "Use implementer evidence and the mockups as source of truth. Define the current slice, acceptance criteria, and files/surfaces while keeping scope presentation-only.",
       "turn_order": "sequential"
     },
     {
       "name": "Critique Plan",
       "participants": ["reviewer", "challenger"],
-      "prompt": "Critique the current slice against the mockups. Name anything that would still feel generic, cheap, or off-target on Android.",
+      "phase_kind": "review",
+      "prompt": "Critique the current slice against the mockups. If evidence is missing, say whether the implementer must produce it or whether the gap is externally blocked.",
       "turn_order": "sequential"
     },
     {
       "name": "Implement",
       "participants": ["implementer"],
-      "prompt": "Implement the current slice in Routify.Web. Validate it. Report files, evidence, remaining gaps, and whether another slice is required.",
+      "phase_kind": "execute",
+      "prompt": "Implement the current slice in Routify.Web. You own validation and required proof artifacts. Report files, evidence, blockers, and whether another slice is required.",
       "turn_order": "sequential"
     },
     {
       "name": "Assess",
       "participants": ["reviewer", "challenger"],
-      "prompt": "Assess only against shippable mockup fidelity, not partial improvement. End with FINAL_STATUS: APPROVED only if it feels mockup-level with no material gaps; else FINAL_STATUS: CONTINUE plus exact gaps.",
+      "phase_kind": "assess",
+      "prompt": "Assess only against shippable mockup fidelity. End with FINAL_STATUS: APPROVED if no material gaps; else FINAL_STATUS: CONTINUE or FINAL_STATUS: BLOCKED plus exact gaps and BLOCKER: ...",
       "turn_order": "sequential",
       "is_output": true,
-      "complete_when_all_contain": "FINAL_STATUS: APPROVED"
+      "complete_when_all_contain": "FINAL_STATUS: APPROVED",
+      "interrupt_when_all_contain": "FINAL_STATUS: BLOCKED",
+      "interrupt_reason": "blocked: external dependency or missing proof artifact"
     },
     {
       "name": "Next Slice",
       "participants": ["planner"],
-      "prompt": "If Assess did not unanimously approve, define the next slice to close the exact mockup gaps, list acceptance criteria/files, and hand off to implementer. The session continues automatically.",
+      "phase_kind": "plan",
+      "prompt": "If Assess returned CONTINUE, define the next slice to close the exact gaps, list acceptance criteria/files, and hand off to implementer. Do not relaunch a BLOCKED loop.",
       "turn_order": "sequential",
       "loop_to_phase": 2
     }

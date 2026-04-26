@@ -3,23 +3,31 @@
   "name": "Planning",
   "description": "Turn a problem into an execution plan through framing, challenge, and synthesis.",
   "roles": ["planner", "challenger", "synthesiser"],
+  "governance": {
+    "lead_role": "planner",
+    "planning_role": "planner",
+    "review_roles": ["challenger"]
+  },
   "user_required": false,
   "phases": [
     {
       "name": "Frame",
       "participants": ["planner"],
+      "phase_kind": "frame",
       "prompt": "State the goal, constraints, context, and success criteria.",
       "turn_order": "sequential"
     },
     {
       "name": "Challenge",
       "participants": ["challenger"],
+      "phase_kind": "review",
       "prompt": "Test the plan. Find gaps, raise risks, question assumptions. Provide your own independent analysis.",
       "turn_order": "sequential"
     },
     {
       "name": "Plan",
       "participants": ["synthesiser"],
+      "phase_kind": "summary",
       "prompt": "Write the final plan: ordered actions, decisions made, risks acknowledged, and open questions.",
       "turn_order": "sequential",
       "is_output": true

@@ -20,6 +20,54 @@ let sessionTemplates = [];
 let activeSessionsByChannel = {};
 let sessionIndicatorTargetChannel = null;
 
+function _formatSessionRole(role) {
+    return String(role || '')
+        .trim()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function _getSessionForChannel(channelName) {
+    const channel = channelName || window.activeChannel || 'general';
+    return activeSessionsByChannel[channel] || null;
+}
+
+function _getSessionRoleDisplayName(agentName, channelName) {
+    const session = _getSessionForChannel(channelName);
+    const agentKey = String(agentName || '').toLowerCase();
+    if (!session || !agentKey) return '';
+
+    const currentAgent = String(session.current_agent || session.waiting_on || '').toLowerCase();
+    if (session.current_role && currentAgent === agentKey) {
+        return _formatSessionRole(session.current_role);
+    }
+
+    const assignedRoles = Object.entries(session.cast || {})
+        .filter(([_, assignedAgent]) => String(assignedAgent || '').toLowerCase() === agentKey)
+        .map(([role]) => role);
+
+    if (!assignedRoles.length) return '';
+    if (assignedRoles.length === 1) return _formatSessionRole(assignedRoles[0]);
+    if (session.current_role && assignedRoles.includes(session.current_role)) {
+        return _formatSessionRole(session.current_role);
+    }
+    return `${_formatSessionRole(assignedRoles[0])} +${assignedRoles.length - 1}`;
+}
+
+function _getSessionMessageRoleDisplayName(metadata) {
+    const role = metadata && metadata.session_role ? metadata.session_role : '';
+    return role ? _formatSessionRole(role) : '';
+}
+
+function _refreshSessionAwareDisplays() {
+    if (window.refreshAgentDisplayNames) {
+        window.refreshAgentDisplayNames();
+    }
+}
+
+window.getSessionRoleDisplayName = _getSessionRoleDisplayName;
+window.getSessionMessageRoleDisplayName = _getSessionMessageRoleDisplayName;
+
 // ---------------------------------------------------------------------------
 // Message Renderers
 // ---------------------------------------------------------------------------
@@ -50,6 +98,9 @@ window._messageRenderers['session_end'] = function (el, msg) {
     const outputId = msg.metadata?.output_message_id;
     const jumpLink = outputId ? ` <span class="session-output-link" onclick="scrollToSessionOutput(${outputId})">View output</span>` : '';
     el.innerHTML = `<span class="session-banner-icon">&#9632;</span> <strong>${window.escapeHtml(msg.text)}</strong>${jumpLink}`;
+    setTimeout(() => {
+        fetchAllActiveSessions();
+    }, 0);
 };
 
 window._messageRenderers['session_phase'] = function (el, msg) {
@@ -167,6 +218,7 @@ async function fetchAllActiveSessions() {
             });
             activeSession = activeSessionsByChannel[window.activeChannel] || null;
             updateSessionBar();
+            _refreshSessionAwareDisplays();
         }
     } catch (e) {
         console.warn('Failed to fetch active sessions', e);
@@ -184,6 +236,7 @@ async function fetchActiveSession(channelName) {
             if (channelName !== window.activeChannel) return;
             activeSession = data;
             updateSessionBar();
+            _refreshSessionAwareDisplays();
         }
     } catch (e) {
         console.warn('Failed to fetch active session', e);
@@ -214,6 +267,7 @@ function handleSessionEvent(action, session) {
         }
     }
     updateSessionBar();
+    _refreshSessionAwareDisplays();
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +340,9 @@ function updateSessionBar() {
     }
     if (endBtn) endBtn.style.display = '';
 
-    const waitingAgent = s.current_agent_display || s.waiting_on_display || _displayAgentName(s.current_agent || s.waiting_on, s.current_role || '');
+    const waitingAgent = _displayAgentName(s.current_agent || s.waiting_on, s.current_role || '')
+        || s.current_agent_display
+        || s.waiting_on_display;
     if (s.state === 'waiting' && waitingAgent) {
         waitingEl.textContent = `Waiting for ${waitingAgent}`;
         waitingEl.style.display = '';
@@ -386,7 +442,9 @@ function buildSessionCastEditor(tmpl, cast, assignees) {
 // Session launcher modal
 // ---------------------------------------------------------------------------
 
-function showSessionLauncher() {
+async function showSessionLauncher() {
+    await fetchSessionTemplates();
+
     let existing = document.getElementById('session-launcher-modal');
     if (existing) existing.remove();
 
@@ -904,6 +962,7 @@ Hub.on('channel_renamed', function (event) {
 Store.watch('activeChannel', function (newChannel) {
     activeSession = activeSessionsByChannel[newChannel] || null;
     updateSessionBar();
+    _refreshSessionAwareDisplays();
     fetchActiveSession(newChannel);
 });
 
@@ -916,6 +975,7 @@ function _sessionsInit() {
     fetchAllActiveSessions();
     activeSession = null;
     updateSessionBar();
+    _refreshSessionAwareDisplays();
     fetchActiveSession();
 }
 
