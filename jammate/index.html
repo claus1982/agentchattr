@@ -2,9 +2,11 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
   <meta name="theme-color" content="#0e0f1a" />
   <meta name="description" content="JamMate — trova musicisti vicino a te e suona insieme." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>JamMate — Trova chi suona con te</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
@@ -12,7 +14,6 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Header -->
   <header class="app-header">
     <div class="brand">
       <span class="brand-logo">🎸</span>
@@ -21,19 +22,16 @@
     <button id="cityBtn" class="city-chip" title="Cambia città">📍 <span id="cityLabel">Milano</span></button>
   </header>
 
-  <!-- Main views -->
   <main id="app"></main>
 
-  <!-- Bottom navigation -->
   <nav class="tabbar" id="tabbar">
-    <button class="tab" data-view="discover"><span>🔍</span><small>Scopri</small></button>
+    <button class="tab" data-view="discover"><span>🔥</span><small>Scopri</small></button>
     <button class="tab" data-view="board"><span>📌</span><small>Bacheca</small></button>
-    <button class="tab fab" data-view="create"><span>＋</span></button>
-    <button class="tab" data-view="messages"><span>💬</span><small>Chat</small></button>
+    <button class="tab" data-view="messages"><span>💬</span><small>Chat</small><i class="dot" id="chatDot" hidden></i></button>
+    <button class="tab" data-view="tools"><span>🧰</span><small>Strumenti</small></button>
     <button class="tab" data-view="profile"><span>🎵</span><small>Profilo</small></button>
   </nav>
 
-  <!-- Modal host -->
   <div id="modalRoot"></div>
 
   <script src="data.js"></script>

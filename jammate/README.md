@@ -3,13 +3,16 @@
 App per musicisti: trova chi suona vicino a te e suonate insieme dal vivo.
 Questo è un **prototipo funzionante** (Progressive Web App) per validare l'idea — non la versione finale.
 
-## Cosa c'è dentro (i 3 pilastri che contano)
-- **Scopri** 🔍 — cerca musicisti con filtri incrociati: strumento + livello + genere + distanza.
+## Cosa c'è dentro
+- **Scopri** 🔥 — due modalità:
+  - **Match**: scorri i profili stile "swipe" (come Vampr) con **punteggio di compatibilità** basato su generi, distanza e **brani in comune**. Quando c'è interesse reciproco → **è un match!** e si sblocca la chat.
+  - **Cerca**: filtri incrociati (strumento + livello + genere + distanza), risultati ordinati per compatibilità.
 - **Profilo** 🎵 — con la marcia in più di JamMate: il **repertorio con le tonalità esatte**.
-- **Bacheca** 📌 — annunci di band/jam con "slot strumenti mancanti" e candidature.
-- Più: una **chat** demo e la creazione di annunci.
+- **Bacheca** 📌 — annunci di band/jam con "slot strumenti mancanti" e candidature; puoi crearne di tuoi.
+- **Chat** 💬 — messaggistica interna senza scambiarsi il numero.
+- **Cassetta degli attrezzi** 🧰 — **Metronomo** (BPM, tap tempo, accenti) e **Accordatore** col microfono (rilevamento nota + cent) con toni di riferimento per chitarra.
 
-> Non incluse di proposito in questo MVP (verranno dopo, solo se la gente usa le prime): metronomo, accordatore, sistema di feedback completo. La ricerca di mercato dice di validare prima il cuore dell'app.
+> Manca solo il sistema di feedback/endorsement completo post-jam (i punteggi sono mostrati ma non ancora assegnabili): è il prossimo pezzo naturale dopo la validazione.
 
 ## Come provarla (3 modi, dal più semplice)
 

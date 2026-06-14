@@ -1,8 +1,8 @@
 /* JamMate service worker — cache "app shell" per funzionamento offline. */
-const CACHE = "jammate-v1";
+const CACHE = "jammate-v2";
 const ASSETS = [
   "./", "./index.html", "./styles.css", "./app.js", "./data.js",
-  "./manifest.webmanifest", "./icons/icon.svg"
+  "./manifest.webmanifest", "./icons/icon.svg", "./icons/icon-192.png", "./icons/icon-512.png"
 ];
 
 self.addEventListener("install", (e) => {
