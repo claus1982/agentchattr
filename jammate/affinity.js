@@ -45,16 +45,16 @@ const IPIP_ITEMS = [
 const VALUE_KEYS = ["Autodirezione", "Stimolazione", "Edonismo", "Successo", "Potere",
                     "Sicurezza", "Conformità", "Tradizione", "Benevolenza", "Universalismo"];
 const VALUE_ITEMS = [
-  { v: "Autodirezione", q: "Per me conta avere idee originali e fare le cose a modo mio." },
-  { v: "Stimolazione",  q: "Cerco spesso novità, avventura ed esperienze eccitanti." },
-  { v: "Edonismo",      q: "Godermi la vita e divertirmi è una mia priorità." },
-  { v: "Successo",      q: "Voglio avere successo e che riconoscano i miei risultati." },
+  { v: "Autodirezione", q: "Per me conta decidere da solo/a e avere idee originali." },
+  { v: "Stimolazione",  q: "Cerco emozioni forti, novità e avventura." },
+  { v: "Edonismo",      q: "Voglio godermi la vita e i suoi piaceri." },
+  { v: "Successo",      q: "Voglio eccellere e che riconoscano le mie capacità." },
   { v: "Potere",        q: "Mi piace avere influenza e guidare gli altri." },
-  { v: "Sicurezza",     q: "Ho bisogno di stabilità, ordine e ambienti sicuri." },
-  { v: "Conformità",    q: "Cerco di rispettare le regole e non disturbare gli altri." },
-  { v: "Tradizione",    q: "Rispetto le tradizioni e i modi di fare consolidati." },
-  { v: "Benevolenza",   q: "Mi prendo cura delle persone vicine e le aiuto volentieri." },
-  { v: "Universalismo", q: "Mi stanno a cuore la giustizia, l'uguaglianza e l'ambiente." }
+  { v: "Sicurezza",     q: "Ho bisogno di stabilità, ordine e sicurezza." },
+  { v: "Conformità",    q: "Per me conta rispettare le regole e non disturbare." },
+  { v: "Tradizione",    q: "Tengo alle tradizioni e ai valori di sempre." },
+  { v: "Benevolenza",   q: "Mi dedico al benessere delle persone a cui voglio bene." },
+  { v: "Universalismo", q: "Mi sta a cuore la giustizia, l'uguaglianza e l'ambiente." }
 ];
 
 // ---- Stile interpersonale (IPIP-IPC ridotto): Dominanza & Calore ----
@@ -71,13 +71,13 @@ const IPC_ITEMS = [
 
 // ---- Bussola del musicista (custom, band-specifica) ----
 const BUSSOLA = [
-  { id: "goal",    q: "Cosa cerchi dalla musica?",            lo: "Puro divertimento", hi: "Diventare professionista" },
-  { id: "orig",    q: "Originali o cover?",                   lo: "Solo cover",         hi: "Solo brani originali" },
-  { id: "improv",  q: "Come ti piace suonare?",               lo: "Tutto preparato",    hi: "Tanta improvvisazione" },
-  { id: "rehear",  q: "Quanto vuoi provare?",                 lo: "Saltuariamente",     hi: "Più volte a settimana" },
-  { id: "energy",  q: "Che energia preferisci?",              lo: "Calma / acustica",   hi: "Intensa / potente" },
-  { id: "reliab",  q: "Quanto sei affidabile e puntuale?",    lo: "Vado a sensazione",  hi: "Estremamente affidabile" },
-  { id: "reliabW", q: "Quanto conta l'affidabilità altrui?",  lo: "Poco",               hi: "Tantissimo" }
+  { id: "goal",    q: "Qual è il tuo obiettivo con la musica?", lo: "Solo divertirmi",     hi: "Farne una professione" },
+  { id: "orig",    q: "Cosa ti accende di più?",                lo: "Suonare cover",       hi: "Creare brani originali" },
+  { id: "improv",  q: "Sul palco preferisci…",                 lo: "Seguire la scaletta", hi: "Improvvisare e rischiare" },
+  { id: "rehear",  q: "Con che ritmo vuoi provare?",           lo: "Quando capita",       hi: "Più volte a settimana" },
+  { id: "energy",  q: "Il tuo sound ideale è…",                lo: "Intimo e acustico",   hi: "Potente ed energico" },
+  { id: "reliab",  q: "Quanto sei affidabile con prove e impegni?", lo: "Molto flessibile", hi: "Sempre puntuale" },
+  { id: "reliabW", q: "Quanto ti pesa chi è inaffidabile?",    lo: "Per niente",          hi: "Moltissimo" }
 ];
 
 // Pesi a fasce su effect-size (3=alto, 2=medio, 1=basso). Normalizzati a runtime.
@@ -96,6 +96,14 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const sim5 = (a, b) => 1 - Math.abs(a - b) / 4;
 const norm5 = (x) => (x - 1) / 4;
 const mean = (arr) => arr.reduce((s, v) => s + v, 0) / (arr.length || 1);
+
+// Affidabilità "reale": media degli endorsement di puntualità (1..5) se presenti,
+// altrimenti il valore auto-dichiarato nella Bussola.
+function hasEndo(X) { return X.endo && X.endo.endorsements > 0 && X.endo.puntualita > 0; }
+function relOf(X) {
+  if (hasEndo(X)) return Math.max(1, Math.min(5, X.endo.puntualita / 20));
+  return (X.deep && X.deep.reliab) != null ? X.deep.reliab : 3;
+}
 
 function pearson(a, b) {
   const n = a.length; if (!n) return 0;
@@ -157,10 +165,12 @@ function computeAffinity(A, B) {
   // Gusti + repertorio
   const taste = tasteOverlap(A, B);
   comps.push({ key: "taste", s: taste.score, label: "Gusti & repertorio", text: tasteText(taste) });
-  // Affidabilità (anello debole)
+  // Affidabilità (anello debole). Usa gli endorsement reali quando presenti,
+  // altrimenti l'auto-dichiarazione (Bussola).
   if (a.reliab != null && b.reliab != null) {
-    comps.push({ key: "reliability", s: norm5(Math.min(a.reliab, b.reliab)), label: "Affidabilità", text: "Conta per entrambi la serietà negli impegni" });
-    if ((a.reliabW >= 4 && b.reliab <= 2) || (b.reliabW >= 4 && a.reliab <= 2)) warn.push("Possibile attrito sull'affidabilità");
+    const ra = relOf(A), rb = relOf(B), endorsed = hasEndo(A) || hasEndo(B);
+    comps.push({ key: "reliability", s: norm5(Math.min(ra, rb)), label: "Affidabilità", text: endorsed ? "Affidabilità confermata dagli endorsement della community" : "Conta per entrambi la serietà negli impegni" });
+    if ((a.reliabW >= 4 && rb <= 2) || (b.reliabW >= 4 && ra <= 2)) warn.push("Possibile attrito sull'affidabilità");
   }
   // Stile (modo di suonare)
   if (a.orig != null && b.orig != null) {

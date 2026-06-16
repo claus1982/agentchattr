@@ -17,7 +17,7 @@ function freshState() {
       id: "me", name: "", avatar: "🎵", color: GRADS[0], city: "Milano", distanceKm: 0,
       instruments: [], level: "Intermedio", genres: [], bio: "", tagline: "",
       links: { youtube: "", spotify: "", instagram: "" },
-      repertoire: [], endo: { puntualita: 0, tecnica: 0, attitudine: 0 },
+      repertoire: [], endo: { puntualita: 0, tecnica: 0, attitudine: 0, endorsements: 0 },
       deep: { done: false }
     },
     liked: [], passed: [], matches: ["u2"],
@@ -85,7 +85,7 @@ function commonText(p) {
 // Affinità: usa la "Sintonia" (motore affinity.js) se entrambi hanno il
 // Profilo Profondo, altrimenti il punteggio base. Engine isolato in affinity.js.
 function meProfile() {
-  return { id: "me", name: state.me.name, instruments: state.me.instruments, genres: state.me.genres, repertoire: state.me.repertoire, deep: state.me.deep };
+  return { id: "me", name: state.me.name, instruments: state.me.instruments, genres: state.me.genres, repertoire: state.me.repertoire, deep: state.me.deep, endo: state.me.endo };
 }
 function getAffinity(p) {
   if (state.me.deep && state.me.deep.done && p.deep && p.deep.done)
@@ -458,10 +458,36 @@ function openProfileSheet(p) {
     ${endoBlock(p.endo)}
     ${affDetailHtml(aff)}
     <div style="margin-top:22px"><button class="btn" id="contactBtn">💬 ${matched ? "Scrivi a" : "Contatta"} ${esc(p.name.split(" ")[0])}</button></div>
+    ${matched ? `<button class="btn secondary" id="endorseBtn" style="margin-top:10px">⭐ Lascia un endorsement (post-jam)</button>` : ""}
   `);
   $("#contactBtn").onclick = () => {
     if (!state.matches.includes(p.id)) { state.matches.push(p.id); if (!state.messages[p.id]) state.messages[p.id] = []; save(); }
     closeModal(); navigate("messages"); setTimeout(() => openChat(p), 50);
+  };
+  if (matched) $("#endorseBtn").onclick = () => openEndorseSheet(p);
+}
+
+// ---------- Endorsement post-jam (reputazione reale) ----------
+function openEndorseSheet(p) {
+  const row = (name, label, emo) => `<div class="lk"><div class="lk-q">${emo} ${label}</div>
+    <div class="likert" data-name="${name}">${[1, 2, 3, 4, 5].map(v => `<button type="button" data-v="${v}" class="${v === 4 ? "on" : ""}">${v}</button>`).join("")}</div></div>`;
+  openModal(`
+    <h2>⭐ Endorsement per ${esc(p.name.split(" ")[0])}</h2>
+    <div class="aff-note">Avete suonato insieme? Lascia una valutazione onesta. Costruisce la <b>reputazione reale</b> della community e alimenta l'affidabilità nella Sintonia (così non è auto-dichiarata).</div>
+    ${row("punt", "Puntualità", "⏰")}${row("tec", "Tecnica", "🎸")}${row("att", "Attitudine", "🤝")}
+    <button class="btn" id="endoSave" style="margin-top:16px">Invia endorsement</button>
+  `);
+  const root = $("#modalRoot");
+  root.querySelectorAll(".likert").forEach(rw => rw.querySelectorAll("button").forEach(b => b.onclick = () => {
+    rw.querySelectorAll("button").forEach(x => x.classList.remove("on")); b.classList.add("on");
+  }));
+  $("#endoSave").onclick = () => {
+    const g = (n) => { const r = root.querySelector(`.likert[data-name="${n}"] button.on`); return r ? +r.dataset.v : 4; };
+    const map = { puntualita: g("punt"), tecnica: g("tec"), attitudine: g("att") };
+    const n = p.endo.endorsements || 0;
+    ["puntualita", "tecnica", "attitudine"].forEach(k => { p.endo[k] = Math.round((p.endo[k] * n + map[k] * 20) / (n + 1)); });
+    p.endo.endorsements = n + 1; save(); closeModal();
+    toast(`Endorsement inviato ⭐ — reputazione di ${esc(p.name.split(" ")[0])} aggiornata!`);
   };
 }
 

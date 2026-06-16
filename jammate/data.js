@@ -17,15 +17,17 @@ const GENRES = [
 const KEYS = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si",
               "Dom", "Do#m", "Rem", "Mibm", "Mim", "Fam", "Solm", "Lam", "Sibm", "Sim"];
 
+/* Gradienti "mesh" moderni (più ricchi e premium dei linear piatti).
+ * Usati come background di avatar e hero delle swipe card. */
 const GRADS = [
-  "linear-gradient(135deg,#7c5cff,#ff5c8a)",
-  "linear-gradient(135deg,#36d1dc,#5b86e5)",
-  "linear-gradient(135deg,#f7971e,#ffd200)",
-  "linear-gradient(135deg,#11998e,#38ef7d)",
-  "linear-gradient(135deg,#fc466b,#3f5efb)",
-  "linear-gradient(135deg,#ee0979,#ff6a00)",
-  "linear-gradient(135deg,#8e2de2,#4a00e0)",
-  "linear-gradient(135deg,#00b4db,#0083b0)"
+  "radial-gradient(at 18% 18%, #b06cff 0, transparent 55%), radial-gradient(at 82% 12%, #ff5c9d 0, transparent 50%), radial-gradient(at 50% 95%, #5b3cff 0, transparent 55%), #6d4cff",
+  "radial-gradient(at 20% 20%, #5eead4 0, transparent 55%), radial-gradient(at 85% 15%, #38bdf8 0, transparent 50%), radial-gradient(at 50% 100%, #3b5bdb 0, transparent 55%), #2563eb",
+  "radial-gradient(at 15% 20%, #ffd166 0, transparent 55%), radial-gradient(at 85% 10%, #ff8f3f 0, transparent 50%), radial-gradient(at 60% 100%, #ff5c5c 0, transparent 55%), #f97316",
+  "radial-gradient(at 20% 15%, #5eead4 0, transparent 55%), radial-gradient(at 80% 20%, #34d399 0, transparent 50%), radial-gradient(at 50% 100%, #0ea5e9 0, transparent 55%), #10b981",
+  "radial-gradient(at 18% 18%, #ff80b5 0, transparent 55%), radial-gradient(at 85% 15%, #7c5cff 0, transparent 50%), radial-gradient(at 50% 100%, #3f5efb 0, transparent 55%), #d946ef",
+  "radial-gradient(at 20% 20%, #ffb86c 0, transparent 55%), radial-gradient(at 85% 12%, #ff5c8a 0, transparent 50%), radial-gradient(at 55% 100%, #ff2d55 0, transparent 55%), #ff6a3d",
+  "radial-gradient(at 18% 16%, #c084fc 0, transparent 55%), radial-gradient(at 82% 16%, #8b5cf6 0, transparent 50%), radial-gradient(at 50% 100%, #4c1d95 0, transparent 55%), #6d28d9",
+  "radial-gradient(at 20% 18%, #67e8f9 0, transparent 55%), radial-gradient(at 85% 15%, #22d3ee 0, transparent 50%), radial-gradient(at 50% 100%, #0e7490 0, transparent 55%), #0891b2"
 ];
 
 const SEED_PROFILES = [
@@ -280,4 +282,11 @@ const SEED_MESSAGES = {
     };
     p.deep.level = 4;
   });
+})();
+
+/* Conteggio endorsement della community sui profili seed (così l'affidabilità
+ * mostrata deriva da reputazione "reale", non auto-dichiarata). */
+(function seedEndorsementCounts() {
+  const h = (s) => { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) >>> 0; return x; };
+  SEED_PROFILES.forEach(p => { p.endo.endorsements = 4 + (h(p.id + "ne") % 22); });
 })();
