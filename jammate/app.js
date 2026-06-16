@@ -14,7 +14,7 @@ function freshState() {
   return {
     profiles: SEED_PROFILES, events: SEED_EVENTS, messages: SEED_MESSAGES,
     me: {
-      id: "me", name: "", avatar: "🎵", color: GRADS[0], city: "Milano", distanceKm: 0,
+      id: "me", name: "", avatar: "🎵", color: GRADS[0], photo: "", city: "Milano", distanceKm: 0,
       instruments: [], level: "Intermedio", genres: [], bio: "", tagline: "",
       links: { youtube: "", spotify: "", instagram: "" },
       repertoire: [], endo: { puntualita: 0, tecnica: 0, attitudine: 0, endorsements: 0 },
@@ -50,6 +50,38 @@ function chips(list, selected) {
 }
 function toggleChip(node, arr) { const v = node.dataset.chip, i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); node.classList.toggle("on"); }
 function avgScore(e) { return Math.round((e.puntualita + e.tecnica + e.attitudine) / 3); }
+
+// Avatar: foto se presente, altrimenti emoji su gradiente "mesh"
+function avatarTag(o, lg) {
+  const cls = "avatar" + (lg ? " lg" : "");
+  if (o && o.photo) return `<div class="${cls} photo" style="background-image:url('${o.photo}')"></div>`;
+  return `<div class="${cls}" style="background:${(o && o.color) || "var(--card-hi)"}">${(o && o.avatar) || "🎵"}</div>`;
+}
+// Scelta + compressione foto profilo (resize 256px, salvata come dataURL)
+function pickPhoto() {
+  const inp = el(`<input type="file" accept="image/*" style="display:none">`);
+  document.body.appendChild(inp);
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0]; if (!f) { inp.remove(); return; }
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const s = 256, c = document.createElement("canvas"); c.width = s; c.height = s;
+        const ctx = c.getContext("2d"), r = Math.max(s / img.width, s / img.height);
+        const w = img.width * r, h = img.height * r;
+        ctx.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
+        try { state.me.photo = c.toDataURL("image/jpeg", 0.82); save(); toast("Foto aggiornata 📷"); navigate("profile"); }
+        catch (e) { toast("Immagine non valida"); }
+        inp.remove();
+      };
+      img.onerror = () => { toast("Immagine non valida"); inp.remove(); };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+  };
+  inp.click();
+}
 function endoBlock(e) {
   return `<div class="endo">${[["Puntualità", e.puntualita], ["Tecnica", e.tecnica], ["Attitudine", e.attitudine]].map(([l, n]) => `
     <span class="lbl">${l}</span><span class="num">${n}%</span>
@@ -336,8 +368,8 @@ function showMatch(p) {
         <h2>È un match! 🎉</h2>
         <p class="view-sub">Tu e ${esc(p.name.split(" ")[0])} volete suonare insieme.</p>
         <div class="match-avatars">
-          <div class="avatar lg" style="background:${state.me.color}">${state.me.avatar}</div>
-          <div class="avatar lg" style="background:${p.color}">${p.avatar}</div>
+          ${avatarTag(state.me, true)}
+          ${avatarTag(p, true)}
         </div>
         <div style="max-width:320px;margin:0 auto">
           <button class="btn" id="mChat">💬 Scrivi a ${esc(p.name.split(" ")[0])}</button>
@@ -393,7 +425,7 @@ function profileCard(p) {
   const c = el(`
     <div class="card">
       <div class="card-head">
-        <div class="avatar" style="background:${p.color}">${p.avatar}</div>
+        ${avatarTag(p)}
         <div class="meta">
           <div class="name">${esc(p.name)} <span class="score">★ ${avgScore(p.endo)}</span></div>
           <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(p.level)}</div>
@@ -439,7 +471,7 @@ function openProfileSheet(p) {
   const aff = getAffinity(p);
   openModal(`
     <div style="text-align:center">
-      <div class="avatar lg" style="margin:0 auto;background:${p.color}">${p.avatar}</div>
+      <div style="display:flex;justify-content:center">${avatarTag(p, true)}</div>
       <h2>${esc(p.name)} ${p.deep && p.deep.done ? '<span class="tag accent" style="font-size:.6rem;vertical-align:middle">🧬</span>' : ''}</h2>
       <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(p.level)} · <span class="score">★ ${avgScore(p.endo)}</span></div>
       ${affHeaderHtml(aff)}
@@ -583,7 +615,7 @@ function renderMessages(app) {
     const thread = state.messages[id] || [];
     const last = thread[thread.length - 1];
     const c = el(`<div class="card"><div class="card-head">
-      <div class="avatar" style="background:${p.color}">${p.avatar}</div>
+      ${avatarTag(p)}
       <div class="meta"><div class="name">${esc(p.name)}</div>
       <div class="loc">${last ? esc((last.from === "me" ? "Tu: " : "") + last.text) : "Avete fatto match! Scrivi qualcosa 👋"}</div></div>
     </div></div>`);
@@ -595,7 +627,7 @@ function openChat(p) {
   if (!state.messages[p.id]) state.messages[p.id] = [];
   openModal(`
     <div class="card-head" style="margin-bottom:12px">
-      <div class="avatar" style="background:${p.color}">${p.avatar}</div>
+      ${avatarTag(p)}
       <div class="meta"><div class="name">${esc(p.name)}</div><div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km</div></div>
     </div>
     <div class="msg-thread" id="thread"></div>
@@ -621,7 +653,7 @@ function renderProfile(app) {
   app.appendChild(el(`
     <div>
       <div style="text-align:center;margin-bottom:8px">
-        <div class="avatar lg" style="margin:0 auto;background:${m.color}">${m.avatar}</div>
+        <div class="avatar-wrap" id="meAvatar" title="Cambia foto">${avatarTag(m, true)}<span class="cam">📷</span></div>
         <h1 class="view-title" style="margin-bottom:0">${esc(m.name || "Il mio profilo")}</h1>
         <div class="loc">📍 ${esc(m.city)} · ${esc(m.level)}</div>
       </div>
@@ -655,6 +687,7 @@ function renderProfile(app) {
       <button class="btn secondary" id="resetApp" style="margin-top:10px">Azzera dati demo</button>
     </div>`));
   paintMyRep();
+  $("#meAvatar").onclick = pickPhoto;
   $("#startDeep").onclick = openDeepSurvey;
   $("#addRep").onclick = () => {
     const title = $("#repTitle").value.trim(); if (!title) return toast("Scrivi il titolo del brano");

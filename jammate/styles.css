@@ -430,3 +430,10 @@ body { padding-bottom: calc(104px + var(--safe-bottom)); }
 
 /* Hero swipe card: emoji con alone premium */
 .swipe-card .hero .big-emoji { filter: drop-shadow(0 10px 22px rgba(0,0,0,.5)); }
+
+/* Foto profilo */
+.avatar.photo { background-size: cover; background-position: center; background-repeat: no-repeat; }
+.avatar-wrap { position: relative; display: inline-grid; place-items: center; cursor: pointer; }
+.avatar-wrap .cam { position: absolute; bottom: 2px; right: 2px; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center; font-size: .9rem; background: var(--accent-grad);
+  border: 2px solid var(--bg); box-shadow: var(--shadow-sm); }
