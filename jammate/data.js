@@ -235,3 +235,30 @@ const SEED_MESSAGES = {
     { from: "them", text: "Amy Winehouse, Adele, un po' di Beyoncé. Tu su che pezzi te la cavi?" }
   ]
 };
+
+/* Profili "Profondo" di esempio per i musicisti seed (così la Sintonia è
+ * dimostrabile appena l'utente completa il proprio sondaggio). Derivati in
+ * modo deterministico dall'id, con affidabilità legata agli endorsement. */
+(function attachSeedDeep() {
+  const h = (s) => { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) >>> 0; return x; };
+  const pick = (p, salt, min, max) => min + (h(p.id + salt) % (max - min + 1));
+  SEED_PROFILES.forEach(p => {
+    p.deep = {
+      done: true,
+      goal: pick(p, "g", 1, 5),
+      orig: pick(p, "o", 1, 5),
+      improv: pick(p, "i", 1, 5),
+      rehear: pick(p, "rh", 1, 5),
+      energy: pick(p, "e", 1, 5),
+      reliab: Math.max(1, Math.min(5, Math.round(p.endo.puntualita / 20))),
+      reliabW: pick(p, "w", 2, 5),
+      big5: {
+        O: (h(p.id + "O") % 100) / 100,
+        C: Math.min(1, (p.endo.puntualita / 100) * 0.7 + (h(p.id + "C") % 30) / 100),
+        E: (h(p.id + "E") % 100) / 100,
+        A: Math.min(1, (p.endo.attitudine / 100) * 0.7 + (h(p.id + "A") % 30) / 100),
+        N: (h(p.id + "N") % 100) / 100
+      }
+    };
+  });
+})();

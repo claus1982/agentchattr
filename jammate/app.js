@@ -17,7 +17,8 @@ function freshState() {
       id: "me", name: "", avatar: "🎵", color: GRADS[0], city: "Milano", distanceKm: 0,
       instruments: [], level: "Intermedio", genres: [], bio: "", tagline: "",
       links: { youtube: "", spotify: "", instagram: "" },
-      repertoire: [], endo: { puntualita: 0, tecnica: 0, attitudine: 0 }
+      repertoire: [], endo: { puntualita: 0, tecnica: 0, attitudine: 0 },
+      deep: { done: false }
     },
     liked: [], passed: [], matches: ["u2"],
     filters: { instrument: "", level: "", genre: "", distance: 30 },
@@ -25,7 +26,7 @@ function freshState() {
     onboarded: false
   };
 }
-function migrate(s) { const base = freshState(); return Object.assign(base, s, { ui: Object.assign(base.ui, s.ui || {}) }); }
+function migrate(s) { const base = freshState(); return Object.assign(base, s, { ui: Object.assign(base.ui, s.ui || {}), me: Object.assign(base.me, s.me || {}) }); }
 
 let state = loadState();
 function save() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
@@ -79,6 +80,39 @@ function commonText(p) {
   if (so.length) return `🎵 ${so.length} brano${so.length > 1 ? "i" : ""} in comune: ${so.map(x => x.title).join(", ")}`;
   if (g.length) return `🎯 Generi in comune: ${g.join(", ")}`;
   return `📍 A ${p.distanceKm} km da te`;
+}
+
+// Affinità: usa la "Sintonia" (motore affinity.js) se entrambi hanno il
+// Profilo Profondo, altrimenti il punteggio base. Engine isolato in affinity.js.
+function meProfile() {
+  return { id: "me", name: state.me.name, instruments: state.me.instruments, genres: state.me.genres, repertoire: state.me.repertoire, deep: state.me.deep };
+}
+function getAffinity(p) {
+  if (state.me.deep && state.me.deep.done && p.deep && p.deep.done)
+    return { mode: "sintonia", res: window.JamAffinity.computeAffinity(meProfile(), p) };
+  return { mode: "base", score: compatibility(p) };
+}
+function affLabel(aff) { return aff.mode === "sintonia" ? `🧬 Sintonia ${aff.res.score}%` : `⚡ ${aff.score}%`; }
+function affCommon(aff, p) { return aff.mode === "sintonia" ? aff.res.parts[0].text : commonText(p); }
+function affHeaderHtml(aff) {
+  return aff.mode === "sintonia"
+    ? `<div class="aff-score" style="margin-top:6px">🧬 Sintonia ${aff.res.score}%</div>`
+    : `<div style="margin-top:6px;font-weight:800;color:var(--accent)">⚡ ${aff.score}% affinità di base</div>`;
+}
+function affDetailHtml(aff) {
+  if (aff.mode !== "sintonia")
+    return `<div class="aff-note">🧬 Completa il <b>Profilo Profondo</b> (scheda Profilo) per vedere la <b>Sintonia</b> con la spiegazione, basata su obiettivi, affidabilità e gusti condivisi.</div>`;
+  const r = aff.res;
+  const bars = r.parts.slice(0, 4).map(p => `
+    <span class="lbl">${esc(p.label)}</span><span class="num">${p.pct}%</span>
+    <div class="bar" style="grid-column:1/-1"><i style="width:${p.pct}%"></i></div>`).join("");
+  const reasons = r.parts.slice(0, 3).map(p => `• ${esc(p.text)}`).join("<br>");
+  const warn = r.warn.map(w => `<div class="warn-chip">⚠️ ${esc(w)}</div>`).join("");
+  return `<div class="section-label">Perché vi trovate</div>
+    <div class="endo">${bars}</div>
+    <div class="aff-note">${reasons}</div>
+    ${warn}
+    <div class="aff-note">La Sintonia si basa su valori e gusti condivisi: un ottimo punto di partenza, <b>non una garanzia</b>. La vera intesa nasce suonando insieme. 🎶</div>`;
 }
 
 // ---------- Router ----------
@@ -200,13 +234,14 @@ function filterButton() {
 }
 
 function swipeCard(p) {
+  const aff = getAffinity(p);
   const card = el(`
     <div class="swipe-card" data-id="${p.id}">
       <div class="stamp like">JAM!</div>
       <div class="stamp nope">NO</div>
       <div class="hero" style="background:${p.color}">
         <div class="big-emoji">${p.avatar}</div>
-        <div class="compat">⚡ ${compatibility(p)}%</div>
+        <div class="compat">${affLabel(aff)}</div>
       </div>
       <div class="body">
         <div class="name">${esc(p.name)} <span class="score">★ ${avgScore(p.endo)}</span></div>
@@ -216,7 +251,7 @@ function swipeCard(p) {
           ${p.instruments.map(i => `<span class="tag accent">${esc(i)}</span>`).join("")}
           ${p.genres.map(g => `<span class="tag">${esc(g)}</span>`).join("")}
         </div>
-        <div class="common">${esc(commonText(p))}</div>
+        <div class="common">${esc(affCommon(aff, p))}</div>
       </div>
     </div>`);
   attachDrag(card, p);
@@ -354,13 +389,13 @@ function profileCard(p) {
           <div class="name">${esc(p.name)} <span class="score">★ ${avgScore(p.endo)}</span></div>
           <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(p.level)}</div>
         </div>
-        <div class="compat-mini" style="font-weight:800;color:var(--accent)">⚡${compatibility(p)}%</div>
+        <div class="compat-mini" style="font-weight:800;color:var(--accent)">${affLabel(getAffinity(p))}</div>
       </div>
       <div class="tags">
         ${p.instruments.map(i => `<span class="tag accent">${esc(i)}</span>`).join("")}
         ${p.genres.slice(0, 3).map(g => `<span class="tag">${esc(g)}</span>`).join("")}
       </div>
-      <div class="tags" style="margin-top:6px"><span class="dist">🎵 ${p.repertoire.length} brani · ${esc(commonText(p))}</span></div>
+      <div class="tags" style="margin-top:6px"><span class="dist">🎵 ${p.repertoire.length} brani · ${esc(affCommon(getAffinity(p), p))}</span></div>
     </div>`);
   c.onclick = () => openProfileSheet(p);
   return c;
@@ -392,12 +427,13 @@ function openFilterSheet() {
 function openProfileSheet(p) {
   const links = Object.entries(p.links).filter(([, v]) => v);
   const matched = state.matches.includes(p.id);
+  const aff = getAffinity(p);
   openModal(`
     <div style="text-align:center">
       <div class="avatar lg" style="margin:0 auto;background:${p.color}">${p.avatar}</div>
-      <h2>${esc(p.name)}</h2>
+      <h2>${esc(p.name)} ${p.deep && p.deep.done ? '<span class="tag accent" style="font-size:.6rem;vertical-align:middle">🧬</span>' : ''}</h2>
       <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(p.level)} · <span class="score">★ ${avgScore(p.endo)}</span></div>
-      <div style="margin-top:6px;font-weight:800;color:var(--accent)">⚡ ${compatibility(p)}% compatibilità</div>
+      ${affHeaderHtml(aff)}
     </div>
     <div class="tags" style="justify-content:center;margin-top:10px">
       ${p.instruments.map(i => `<span class="tag accent">${esc(i)}</span>`).join("")}
@@ -411,6 +447,7 @@ function openProfileSheet(p) {
         <span class="key-badge">${esc(r.key)}</span></div>`).join("") : `<p class="view-sub">Nessun brano indicato.</p>`}
     <div class="section-label">Reputazione</div>
     ${endoBlock(p.endo)}
+    ${affDetailHtml(aff)}
     <div style="margin-top:22px"><button class="btn" id="contactBtn">💬 ${matched ? "Scrivi a" : "Contatta"} ${esc(p.name.split(" ")[0])}</button></div>
   `);
   $("#contactBtn").onclick = () => {
@@ -553,6 +590,11 @@ function renderProfile(app) {
         <h1 class="view-title" style="margin-bottom:0">${esc(m.name || "Il mio profilo")}</h1>
         <div class="loc">📍 ${esc(m.city)} · ${esc(m.level)}</div>
       </div>
+      <div class="card flat">
+        <div class="row-between"><b>🧬 Profilo Profondo</b> ${state.me.deep.done ? '<span class="tag lvl">Completato</span>' : '<span class="badge-new">novità</span>'}</div>
+        <p class="view-sub" style="margin:8px 0 12px">Sondaggio opzionale (~4 min): valori da musicista + un test di personalità validato (Big Five). Sblocca la <b>Sintonia</b> con chi l'ha fatto. Ludico ma scientifico, niente diagnosi.</p>
+        <button class="btn" id="startDeep">${state.me.deep.done ? "Rivedi / rifai il sondaggio" : "Inizia il Profilo Profondo"}</button>
+      </div>
       <div class="hint">💡 Il tuo <b>repertorio con le tonalità</b> ti rende trovabile e aumenta la compatibilità con chi sa gli stessi brani. È la marcia in più di JamMate.</div>
       <div class="section-label">Repertorio & tonalità</div>
       <div id="myRep"></div>
@@ -578,6 +620,7 @@ function renderProfile(app) {
       <button class="btn secondary" id="resetApp" style="margin-top:10px">Azzera dati demo</button>
     </div>`));
   paintMyRep();
+  $("#startDeep").onclick = openDeepSurvey;
   $("#addRep").onclick = () => {
     const title = $("#repTitle").value.trim(); if (!title) return toast("Scrivi il titolo del brano");
     m.repertoire.push({ title, artist: $("#repArtist").value.trim(), key: $("#repKey").value });
@@ -797,6 +840,39 @@ function playRef(freq, btn) {
   setTimeout(() => { if (tuner.osc === o) { try { o.stop(); } catch (e) {} tuner.osc = null; btn.classList.remove("on"); btn.dataset.playing = ""; } }, 2000);
 }
 function ensureTunerCtx() { tuner.ctx = tuner.ctx || new (window.AudioContext || window.webkitAudioContext)(); if (tuner.ctx.state === "suspended") tuner.ctx.resume(); }
+
+// ---------- Sondaggio "Profilo Profondo" ----------
+function openDeepSurvey() {
+  const I = window.JamAffinity.IPIP_ITEMS, B = window.JamAffinity.BUSSOLA;
+  const likert = (name, label, lo, hi) => `
+    <div class="lk"><div class="lk-q">${esc(label)}</div>
+      <div class="likert" data-name="${name}">${[1, 2, 3, 4, 5].map(v => `<button type="button" data-v="${v}" class="${v === 3 ? "on" : ""}">${v}</button>`).join("")}</div>
+      ${lo ? `<div class="lk-ends"><span>${esc(lo)}</span><span>${esc(hi)}</span></div>` : ""}
+    </div>`;
+  openModal(`
+    <h2>🧬 Profilo Profondo</h2>
+    <div class="aff-note">Niente diagnosi: è un profilo <b>ludico ma su scienza vera</b> (Big Five / Mini-IPIP, dominio pubblico). Serve a suggerire affinità e rompere il ghiaccio, non a "predire l'anima gemella". Opzionale e modificabile quando vuoi.</div>
+    <div class="section-label">La bussola del musicista</div>
+    ${B.map(b => likert(b.id, b.q, b.lo, b.hi)).join("")}
+    <div class="section-label">Personalità — quanto sei d'accordo?</div>
+    <div class="lk-ends" style="margin-bottom:6px"><span>1 = per niente</span><span>5 = del tutto</span></div>
+    ${I.map((it, i) => likert("ipip" + i, it.q)).join("")}
+    <button class="btn" id="deepSave" style="margin-top:18px">Salva il Profilo Profondo</button>
+  `);
+  const root = $("#modalRoot");
+  root.querySelectorAll(".likert").forEach(row => row.querySelectorAll("button").forEach(btn => btn.onclick = () => {
+    row.querySelectorAll("button").forEach(x => x.classList.remove("on")); btn.classList.add("on");
+  }));
+  $("#deepSave").onclick = () => {
+    const get = (name) => { const r = root.querySelector(`.likert[data-name="${name}"] button.on`); return r ? +r.dataset.v : 3; };
+    const answers = I.map((_, i) => get("ipip" + i));
+    const deep = { done: true, big5: window.JamAffinity.scoreBig5(answers) };
+    B.forEach(b => deep[b.id] = get(b.id));
+    state.me.deep = deep; save(); closeModal();
+    toast("Profilo Profondo salvato 🧬 — ora vedi la Sintonia!");
+    navigate("profile");
+  };
+}
 
 // ---------- Modal helpers ----------
 function openModal(innerHTML) {
