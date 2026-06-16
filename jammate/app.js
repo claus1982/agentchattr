@@ -6,7 +6,7 @@
 const STORE_KEY = "jammate_state_v2";
 
 function loadState() {
-  const raw = localStorage.getItem(STORE_KEY);
+  const raw = JM.Storage.get(STORE_KEY);
   if (raw) { try { return migrate(JSON.parse(raw)); } catch (e) { /* fallthrough */ } }
   return freshState();
 }
@@ -30,7 +30,7 @@ function freshState() {
 function migrate(s) { const base = freshState(); return Object.assign(base, s, { ui: Object.assign(base.ui, s.ui || {}), me: Object.assign(base.me, s.me || {}) }); }
 
 let state = loadState();
-function save() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+function save() { JM.Storage.set(STORE_KEY, JSON.stringify(state)); }
 
 // ---------- Utility ----------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -706,7 +706,7 @@ function renderProfile(app) {
     m.links = { youtube: $("#lkYt").value.trim(), spotify: $("#lkSp").value.trim(), instagram: $("#lkIg").value.trim() };
     save(); toast("Profilo salvato ✓");
   };
-  $("#resetApp").onclick = () => { if (confirm("Azzerare tutti i dati e ripartire dalla demo?")) { localStorage.removeItem(STORE_KEY); state = loadState(); navigate("discover"); } };
+  $("#resetApp").onclick = () => { if (confirm("Azzerare tutti i dati e ripartire dalla demo?")) { JM.Storage.remove(STORE_KEY); state = loadState(); navigate("discover"); } };
 }
 function paintMyRep() {
   const box = $("#myRep"); if (!box) return;

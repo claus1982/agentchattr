@@ -1,7 +1,7 @@
 /* JamMate service worker — cache "app shell" per funzionamento offline. */
-const CACHE = "jammate-v10";
+const CACHE = "jammate-v11";
 const ASSETS = [
-  "./", "./index.html", "./styles.css", "./app.js", "./data.js", "./affinity.js", "./gigs.js",
+  "./", "./index.html", "./styles.css", "./storage.js", "./app.js", "./data.js", "./affinity.js", "./gigs.js",
   "./manifest.webmanifest", "./icons/icon.svg", "./icons/icon-192.png", "./icons/icon-512.png"
 ];
 

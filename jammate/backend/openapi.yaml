@@ -1,0 +1,379 @@
+openapi: 3.0.3
+info:
+  title: JamMate API
+  version: 0.1.0
+  description: >
+    Contratto API di JamMate (Tappa 2). Definisce gli endpoint che le Azure
+    Functions esporranno e che il futuro backend "api" del data layer
+    (storage.js) consumerà. Autenticazione via token di Microsoft Entra
+    External ID (Bearer JWT). Regione UE. Questo file è il riferimento
+    condiviso fra frontend e backend: si implementa contro questo contratto.
+servers:
+  - url: https://api.jammate.example/v1
+    description: Produzione (Azure Functions, regione UE)
+  - url: http://localhost:7071/v1
+    description: Sviluppo locale (Azure Functions Core Tools)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - { name: profili,     description: Profilo musicista e profilo profondo }
+  - { name: scoperta,    description: Discover, swipe e match (Sintonia) }
+  - { name: band,        description: Gestione band }
+  - { name: locali,      description: Locali e serate aperte }
+  - { name: prenotazioni, description: Marketplace band <-> locale }
+  - { name: chat,        description: Messaggi }
+
+paths:
+  /me:
+    get:
+      tags: [profili]
+      summary: Profilo dell'utente autenticato
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      tags: [profili]
+      summary: Aggiorna il proprio profilo musicista
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MusicianProfile" } } }
+      responses:
+        "200": { description: Aggiornato, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    delete:
+      tags: [profili]
+      summary: "GDPR: cancella account e dati personali"
+      responses:
+        "204": { description: Account cancellato }
+
+  /me/deep:
+    put:
+      tags: [profili]
+      summary: Salva/aggiorna il profilo profondo (Sintonia)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DeepProfile" } } }
+      responses:
+        "200": { description: Salvato }
+
+  /me/photo:
+    post:
+      tags: [profili]
+      summary: Carica/aggiorna la foto profilo (validata e ri-codificata lato server)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { photoUrl: { type: string } } } } } }
+        "413": { description: File troppo grande }
+        "415": { description: Formato non supportato }
+
+  /discover:
+    get:
+      tags: [scoperta]
+      summary: Profili consigliati con punteggio di affinità
+      parameters:
+        - { name: instrument, in: query, schema: { type: string } }
+        - { name: level,      in: query, schema: { type: string } }
+        - { name: genre,      in: query, schema: { type: string } }
+        - { name: distance,   in: query, schema: { type: integer, default: 30 } }
+        - { name: mode,       in: query, schema: { type: string, enum: [match, recent] } }
+      responses:
+        "200":
+          description: Elenco profili con affinità
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - $ref: "#/components/schemas/PublicProfile"
+                    - type: object
+                      properties:
+                        affinity: { $ref: "#/components/schemas/Affinity" }
+
+  /swipes:
+    post:
+      tags: [scoperta]
+      summary: Registra un like/pass (può generare un match)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, decision]
+              properties:
+                targetUserId: { type: string, format: uuid }
+                decision: { type: string, enum: [liked, passed] }
+      responses:
+        "200":
+          description: Esito (con eventuale match)
+          content: { application/json: { schema: { type: object, properties: { matched: { type: boolean }, matchId: { type: string } } } } }
+
+  /matches:
+    get:
+      tags: [scoperta]
+      summary: I miei match
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/PublicProfile" } } } } }
+
+  /bands:
+    get:
+      tags: [band]
+      summary: Le band di cui faccio parte
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Band" } } } } } }
+    post:
+      tags: [band]
+      summary: Crea una band (divento admin)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Band" } } } }
+      responses: { "201": { description: Creata, content: { application/json: { schema: { $ref: "#/components/schemas/Band" } } } } }
+  /bands/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    put:
+      tags: [band]
+      summary: Modifica band (solo admin della band)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Band" } } } }
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /venues:
+    get:
+      tags: [locali]
+      summary: Locali (con serate aperte)
+      parameters: [{ name: city, in: query, schema: { type: string } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Venue" } } } } } }
+    post:
+      tags: [locali]
+      summary: Registra il mio locale
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Venue" } } } }
+      responses: { "201": { description: Creato } }
+
+  /bookings:
+    get:
+      tags: [prenotazioni]
+      summary: Le mie prenotazioni (come band o come locale)
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Booking" } } } } } }
+    post:
+      tags: [prenotazioni]
+      summary: Crea una richiesta/preventivo
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Booking" } } } }
+      responses: { "201": { description: Creata, content: { application/json: { schema: { $ref: "#/components/schemas/Booking" } } } } }
+  /bookings/{id}/status:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    patch:
+      tags: [prenotazioni]
+      summary: Avanza lo stato (quoted/confirmed/completed/cancelled)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [quoted, confirmed, completed, cancelled] }
+                quote:  { type: string }
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /bookings/{id}/reviews:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    post:
+      tags: [prenotazioni]
+      summary: Recensione a doppio cieco (rivelata quando entrambe le parti recensiscono)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                text:   { type: string }
+      responses: { "201": { description: Inviata } }
+
+  /threads/{id}/messages:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    get:
+      tags: [chat]
+      summary: Messaggi di una conversazione
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } }
+    post:
+      tags: [chat]
+      summary: Invia un messaggio
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [body], properties: { body: { type: string } } } } } }
+      responses: { "201": { description: Inviato } }
+
+  /webhooks/stripe:
+    post:
+      tags: [prenotazioni]
+      summary: Webhook Stripe (firma verificata; nessun auth Bearer)
+      security: []
+      responses: { "200": { description: Ricevuto } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT emesso da Microsoft Entra External ID
+
+  responses:
+    Unauthorized: { description: Token mancante o non valido }
+    Forbidden:    { description: Non autorizzato su questa risorsa }
+    BadRequest:   { description: Dati non validi }
+
+  schemas:
+    Me:
+      type: object
+      properties:
+        id:    { type: string, format: uuid }
+        email: { type: string }
+        profile: { $ref: "#/components/schemas/MusicianProfile" }
+        deep:    { $ref: "#/components/schemas/DeepProfile" }
+        endo:    { $ref: "#/components/schemas/Endorsements" }
+
+    MusicianProfile:
+      type: object
+      properties:
+        name:        { type: string }
+        avatar:      { type: string }
+        photoUrl:    { type: string }
+        color:       { type: string }
+        city:        { type: string }
+        level:       { type: string, enum: [Principiante, Intermedio, Avanzato, Pro] }
+        bio:         { type: string }
+        tagline:     { type: string }
+        instruments: { type: array, items: { type: string } }
+        genres:      { type: array, items: { type: string } }
+        links:
+          type: object
+          properties:
+            youtube:   { type: string }
+            spotify:   { type: string }
+            instagram: { type: string }
+        repertoire:
+          type: array
+          items:
+            type: object
+            properties: { song: { type: string }, artist: { type: string }, key: { type: string } }
+
+    PublicProfile:
+      type: object
+      description: Profilo visibile ad altri utenti (sottoinsieme di MusicianProfile)
+      properties:
+        id:          { type: string, format: uuid }
+        name:        { type: string }
+        avatar:      { type: string }
+        photoUrl:    { type: string }
+        city:        { type: string }
+        distanceKm:  { type: integer }
+        level:       { type: string }
+        instruments: { type: array, items: { type: string } }
+        genres:      { type: array, items: { type: string } }
+        tagline:     { type: string }
+        endo:        { $ref: "#/components/schemas/Endorsements" }
+
+    DeepProfile:
+      type: object
+      description: Dati per il motore Sintonia (trattati come categoria speciale GDPR)
+      properties:
+        done:   { type: boolean }
+        values: { type: object, additionalProperties: { type: number } }
+        big5:   { type: object, properties: { O: {type: number}, C: {type: number}, E: {type: number}, A: {type: number}, N: {type: number} } }
+        ipc:    { type: object, properties: { D: {type: number}, W: {type: number} } }
+        goal:   { type: object, additionalProperties: { type: number } }
+
+    Affinity:
+      type: object
+      description: Output del motore di affinità (vedi affinity.js)
+      properties:
+        score:      { type: integer, description: "0-100" }
+        components:
+          type: array
+          items:
+            type: object
+            properties: { key: { type: string }, s: { type: number }, label: { type: string }, text: { type: string } }
+
+    Endorsements:
+      type: object
+      properties:
+        puntualita:   { type: number }
+        tecnica:      { type: number }
+        attitudine:   { type: number }
+        endorsements: { type: integer }
+
+    Band:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        name:      { type: string }
+        avatar:    { type: string }
+        color:     { type: string }
+        city:      { type: string }
+        fee:       { type: string }
+        tagline:   { type: string }
+        genres:    { type: array, items: { type: string } }
+        available: { type: boolean }
+        rating:    { type: number }
+        ratings:   { type: integer }
+        members:
+          type: array
+          items:
+            type: object
+            properties: { userId: { type: string }, role: { type: string }, isAdmin: { type: boolean } }
+        repertoire:
+          type: array
+          items:
+            type: object
+            properties: { song: { type: string }, artist: { type: string } }
+
+    Venue:
+      type: object
+      properties:
+        id:       { type: string, format: uuid }
+        name:     { type: string }
+        avatar:   { type: string }
+        color:    { type: string }
+        type:     { type: string }
+        city:     { type: string }
+        capacity: { type: integer }
+        genres:   { type: array, items: { type: string } }
+        rating:   { type: number }
+        ratings:  { type: integer }
+        openNight:
+          type: object
+          properties: { date: { type: string, format: date }, genre: { type: string }, budget: { type: string } }
+
+    Booking:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        kind:      { type: string, enum: [band, venue] }
+        bandId:    { type: string }
+        bandName:  { type: string }
+        venueId:   { type: string }
+        venueName: { type: string }
+        date:      { type: string, format: date }
+        budget:    { type: string }
+        quote:     { type: string }
+        status:    { type: string, enum: [requested, quoted, confirmed, completed, reviewed, cancelled] }
+
+    Message:
+      type: object
+      properties:
+        id:        { type: integer }
+        threadId:  { type: string, format: uuid }
+        senderId:  { type: string, format: uuid }
+        body:      { type: string }
+        createdAt: { type: string, format: date-time }

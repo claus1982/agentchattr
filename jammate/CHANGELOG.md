@@ -1,5 +1,12 @@
 # JamMate — Changelog
 
+## Non rilasciato — Verso il backend reale su Azure
+- **Data layer sostituibile** (`storage.js`): l'app non usa più `localStorage`
+  direttamente, ma passa da `JM.Storage`. Pronto a puntare ad Azure senza
+  riscrivere la UI. Nessun cambiamento visibile per l'utente.
+- **Contratto backend** (`backend/`): `openapi.yaml` (API) + `schema.sql`
+  (database PostgreSQL) + architettura Azure (`ARCHITECTURE_AZURE.md`).
+
 ## v0.1.0 — Prototipo MVP (2026-06-16)
 Prima versione dimostrativa (PWA, dati locali, pagamenti simulati).
 
