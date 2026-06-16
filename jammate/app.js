@@ -101,18 +101,27 @@ function affHeaderHtml(aff) {
 }
 function affDetailHtml(aff) {
   if (aff.mode !== "sintonia")
-    return `<div class="aff-note">🧬 Completa il <b>Profilo Profondo</b> (scheda Profilo) per vedere la <b>Sintonia</b> con la spiegazione, basata su obiettivi, affidabilità e gusti condivisi.</div>`;
+    return `<div class="aff-note">🧬 Completa il <b>Profilo Profondo</b> (scheda Profilo) per vedere la <b>Sintonia</b> con la spiegazione, basata su valori, obiettivi, affidabilità e gusti condivisi.</div>`;
   const r = aff.res;
-  const bars = r.parts.slice(0, 4).map(p => `
+  const insight = r.insight ? `<div class="insight"><span class="insight-emoji">💡</span><div style="flex:1">
+      <b>L'insight di JamMate</b><br>${esc(r.insight.text)}
+      <div class="resonate">Ti risuona? <button onclick="jmResonate(1,this)">👍 Sì</button><button onclick="jmResonate(0,this)">🤔 No</button></div>
+    </div></div>` : "";
+  const bars = r.parts.slice(0, 5).map(p => `
     <span class="lbl">${esc(p.label)}</span><span class="num">${p.pct}%</span>
     <div class="bar" style="grid-column:1/-1"><i style="width:${p.pct}%"></i></div>`).join("");
   const reasons = r.parts.slice(0, 3).map(p => `• ${esc(p.text)}`).join("<br>");
   const warn = r.warn.map(w => `<div class="warn-chip">⚠️ ${esc(w)}</div>`).join("");
-  return `<div class="section-label">Perché vi trovate</div>
+  return `${insight}
+    <div class="section-label">Perché vi trovate · profilo ${esc(r.depth)}</div>
     <div class="endo">${bars}</div>
     <div class="aff-note">${reasons}</div>
     ${warn}
     <div class="aff-note">La Sintonia si basa su valori e gusti condivisi: un ottimo punto di partenza, <b>non una garanzia</b>. La vera intesa nasce suonando insieme. 🎶</div>`;
+}
+function jmResonate(v, btn) {
+  const box = btn.parentElement;
+  box.innerHTML = v ? "Grazie! 🙌 Questo aiuta a migliorare la Sintonia." : "Annotato — niente è una scienza esatta 😉";
 }
 
 // ---------- Router ----------
@@ -843,20 +852,24 @@ function ensureTunerCtx() { tuner.ctx = tuner.ctx || new (window.AudioContext ||
 
 // ---------- Sondaggio "Profilo Profondo" ----------
 function openDeepSurvey() {
-  const I = window.JamAffinity.IPIP_ITEMS, B = window.JamAffinity.BUSSOLA;
+  const J = window.JamAffinity, I = J.IPIP_ITEMS, B = J.BUSSOLA, V = J.VALUE_ITEMS, P = J.IPC_ITEMS;
   const likert = (name, label, lo, hi) => `
     <div class="lk"><div class="lk-q">${esc(label)}</div>
       <div class="likert" data-name="${name}">${[1, 2, 3, 4, 5].map(v => `<button type="button" data-v="${v}" class="${v === 3 ? "on" : ""}">${v}</button>`).join("")}</div>
       ${lo ? `<div class="lk-ends"><span>${esc(lo)}</span><span>${esc(hi)}</span></div>` : ""}
     </div>`;
+  const agreeLegend = `<div class="lk-ends" style="margin-bottom:6px"><span>1 = per niente</span><span>5 = del tutto</span></div>`;
   openModal(`
     <h2>🧬 Profilo Profondo</h2>
-    <div class="aff-note">Niente diagnosi: è un profilo <b>ludico ma su scienza vera</b> (Big Five / Mini-IPIP, dominio pubblico). Serve a suggerire affinità e rompere il ghiaccio, non a "predire l'anima gemella". Opzionale e modificabile quando vuoi.</div>
-    <div class="section-label">La bussola del musicista</div>
+    <div class="aff-note">Profilo <b>ludico ma su scienza vera</b>: valori (modello di Schwartz), personalità (Big Five / Mini-IPIP) e stile relazionale (circumplex). Serve a suggerire affinità e rompere il ghiaccio, <b>non a predire l'anima gemella</b>. Più rispondi, più precisa è la Sintonia. Opzionale e modificabile.</div>
+    <div class="section-label">1 · La bussola del musicista</div>
     ${B.map(b => likert(b.id, b.q, b.lo, b.hi)).join("")}
-    <div class="section-label">Personalità — quanto sei d'accordo?</div>
-    <div class="lk-ends" style="margin-bottom:6px"><span>1 = per niente</span><span>5 = del tutto</span></div>
+    <div class="section-label">2 · I tuoi valori — quanto ti rispecchia?</div>${agreeLegend}
+    ${V.map((it, i) => likert("val" + i, it.q)).join("")}
+    <div class="section-label">3 · Personalità — quanto sei d'accordo?</div>${agreeLegend}
     ${I.map((it, i) => likert("ipip" + i, it.q)).join("")}
+    <div class="section-label">4 · Stile relazionale — quanto sei d'accordo?</div>${agreeLegend}
+    ${P.map((it, i) => likert("ipc" + i, it.q)).join("")}
     <button class="btn" id="deepSave" style="margin-top:18px">Salva il Profilo Profondo</button>
   `);
   const root = $("#modalRoot");
@@ -865,8 +878,12 @@ function openDeepSurvey() {
   }));
   $("#deepSave").onclick = () => {
     const get = (name) => { const r = root.querySelector(`.likert[data-name="${name}"] button.on`); return r ? +r.dataset.v : 3; };
-    const answers = I.map((_, i) => get("ipip" + i));
-    const deep = { done: true, big5: window.JamAffinity.scoreBig5(answers) };
+    const deep = {
+      done: true, level: 4,
+      big5: J.scoreBig5(I.map((_, i) => get("ipip" + i))),
+      values: J.scoreValues(V.map((_, i) => get("val" + i))),
+      ipc: J.scoreIPC(P.map((_, i) => get("ipc" + i)))
+    };
     B.forEach(b => deep[b.id] = get(b.id));
     state.me.deep = deep; save(); closeModal();
     toast("Profilo Profondo salvato 🧬 — ora vedi la Sintonia!");

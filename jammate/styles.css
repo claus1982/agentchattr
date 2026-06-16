@@ -384,3 +384,13 @@ select:focus, input:focus, textarea:focus {
 .hint { background: linear-gradient(135deg, rgba(139,108,255,.14), rgba(255,92,157,.1)); border-color: rgba(139,108,255,.3); }
 
 @media (prefers-reduced-motion: reduce) { .swipe-card .hero .big-emoji { animation: none; } }
+
+/* Insight della Sintonia */
+.insight { display: flex; gap: 12px; align-items: flex-start; margin-top: 14px; padding: 14px;
+  border-radius: 16px; background: linear-gradient(135deg, rgba(139,108,255,.18), rgba(255,92,157,.14));
+  border: 1px solid rgba(139,108,255,.4); box-shadow: var(--shadow-sm); line-height: 1.5; }
+.insight-emoji { font-size: 1.6rem; line-height: 1; }
+.resonate { margin-top: 10px; font-size: .82rem; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.resonate button { background: rgba(255,255,255,.07); border: 1px solid var(--border-soft); color: var(--text);
+  border-radius: 999px; padding: 5px 12px; font-size: .8rem; font-weight: 600; cursor: pointer; }
+.resonate button:active { transform: scale(.95); }

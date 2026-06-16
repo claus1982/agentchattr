@@ -262,3 +262,22 @@ const SEED_MESSAGES = {
     };
   });
 })();
+
+/* Augmenta i profili seed con valori (Schwartz) e stile interpersonale (IPC)
+ * per la Sintonia v2, in modo deterministico dall'id. */
+(function augmentSeedDeepV2() {
+  const VK = ["Autodirezione","Stimolazione","Edonismo","Successo","Potere","Sicurezza","Conformità","Tradizione","Benevolenza","Universalismo"];
+  const h = (s) => { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) >>> 0; return x; };
+  SEED_PROFILES.forEach(p => {
+    if (!p.deep) return;
+    const raw = VK.map((k, i) => 1 + (h(p.id + "val" + i) % 5)); // 1..5
+    const m = raw.reduce((s, v) => s + v, 0) / raw.length;
+    const values = {}; VK.forEach((k, i) => values[k] = raw[i] - m);
+    p.deep.values = values;
+    p.deep.ipc = {
+      D: ((h(p.id + "D") % 100) / 50 - 1),   // -1..1
+      W: Math.min(1, (p.endo.attitudine / 100) * 1.2 - 0.4 + ((h(p.id + "W") % 30) / 100))
+    };
+    p.deep.level = 4;
+  });
+})();
