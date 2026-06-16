@@ -14,6 +14,8 @@ codice server. Servono per costruire l'app multi‑utente reale su Azure
   (Azure, Functions, PostgreSQL, Entra, Stripe, ecc.) con alternative scartate.
 - **`functions/`** — Scheletro delle Azure Functions (Node.js v4) generato dal
   contratto: auth Entra, accesso DB e primi endpoint, pronto da completare.
+- **`DEPLOY_AZURE.md`** — Guida al deploy su Azure **passo‑passo** (clic per
+  clic nel portale), da seguire insieme quando si collega la subscription.
 
 ## Come si lega al frontend
 Il frontend ora passa **sempre** da `../storage.js` (data layer). Oggi quel
