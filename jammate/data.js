@@ -290,3 +290,38 @@ const SEED_MESSAGES = {
   const h = (s) => { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) >>> 0; return x; };
   SEED_PROFILES.forEach(p => { p.endo.endorsements = 4 + (h(p.id + "ne") % 22); });
 })();
+
+/* ===== FASE 1: marketplace band ↔ locali (dati seed) ===== */
+const SEED_VENUES = [
+  { id: "v1", name: "Blue Note Lambrate", type: "Jazz club", city: "Milano", capacity: 120, avatar: "🎷", color: GRADS[1],
+    genres: ["Jazz", "Blues", "Soul"], rating: 46, ratings: 31,
+    openNight: { date: "2026-07-03", budget: "300–450€", genre: "Jazz" } },
+  { id: "v2", name: "Pub The Anchor", type: "Pub", city: "Milano", capacity: 80, avatar: "🍺", color: GRADS[2],
+    genres: ["Rock", "Pop", "Indie"], rating: 42, ratings: 18,
+    openNight: { date: "2026-06-28", budget: "200–300€", genre: "Rock/Pop cover" } },
+  { id: "v3", name: "Spazio Eventi Aurora", type: "Sala eventi", city: "Monza", capacity: 250, avatar: "🥂", color: GRADS[4],
+    genres: ["Pop", "Funk", "Soul"], rating: 48, ratings: 12,
+    openNight: { date: "2026-07-12", budget: "600–900€", genre: "Cover band per matrimonio" } },
+  { id: "v4", name: "Osteria del Borgo", type: "Ristorante", city: "Milano", capacity: 60, avatar: "🍷", color: GRADS[5],
+    genres: ["Cantautorato", "Folk", "Acustico"], rating: 44, ratings: 22,
+    openNight: { date: "2026-07-05", budget: "150–250€", genre: "Acustico/cantautorato" } }
+];
+
+const SEED_BANDS = [
+  { id: "b1", name: "The Neon Lights", avatar: "🎸", color: GRADS[4], city: "Milano",
+    genres: ["Pop", "Rock"], members: ["Voce", "Chitarra", "Basso", "Batteria"],
+    tagline: "Cover anni '80–'90, energia pura.", fee: "400€", rating: 48, ratings: 26, available: true,
+    repertoire: ["Take on Me", "Mr. Brightside", "Sweet Child o' Mine"] },
+  { id: "b2", name: "Sunset Trio", avatar: "🎷", color: GRADS[1], city: "Milano",
+    genres: ["Jazz", "Soul"], members: ["Sax", "Pianoforte", "Contrabbasso"],
+    tagline: "Jazz elegante per aperitivi e cene.", fee: "350€", rating: 49, ratings: 15, available: true,
+    repertoire: ["Take Five", "Autumn Leaves", "Fly Me to the Moon"] },
+  { id: "b3", name: "Acustica Libera", avatar: "🎻", color: GRADS[5], city: "Monza",
+    genres: ["Cantautorato", "Folk"], members: ["Voce/Chitarra", "Violino"],
+    tagline: "Cantautorato italiano e folk, intimo.", fee: "220€", rating: 45, ratings: 9, available: true,
+    repertoire: ["La cura", "Yellow", "Viva la Vida"] },
+  { id: "b4", name: "Groove Machine", avatar: "🥁", color: GRADS[6], city: "Milano",
+    genres: ["Funk", "Soul", "Pop"], members: ["Voce", "Chitarra", "Basso", "Batteria", "Tastiere"],
+    tagline: "Funk/soul che riempie la pista.", fee: "550€", rating: 47, ratings: 19, available: false,
+    repertoire: ["Superstition", "Get Lucky", "Uptown Funk"] }
+];

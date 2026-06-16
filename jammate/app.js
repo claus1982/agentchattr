@@ -21,8 +21,9 @@ function freshState() {
       deep: { done: false }
     },
     liked: [], passed: [], matches: ["u2"],
+    bands: [], myVenue: null, bookings: [],
     filters: { instrument: "", level: "", genre: "", distance: 30 },
-    ui: { discoverMode: "match", unread: false },
+    ui: { discoverMode: "match", palcoMode: "band", unread: false },
     onboarded: false
   };
 }
@@ -169,7 +170,7 @@ function render() {
   const app = $("#app"); app.innerHTML = "";
   updateChatDot();
   if (!state.onboarded) return renderOnboarding(app);
-  ({ discover: renderDiscover, board: renderBoard, messages: renderMessages, tools: renderTools, profile: renderProfile }[currentView] || renderDiscover)(app);
+  ({ discover: renderDiscover, board: renderBoard, palco: window.renderPalco, messages: renderMessages, tools: renderTools, profile: renderProfile }[currentView] || renderDiscover)(app);
 }
 function updateChatDot() { const d = $("#chatDot"); if (d) d.hidden = !state.ui.unread; }
 

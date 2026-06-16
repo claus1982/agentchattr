@@ -437,3 +437,9 @@ body { padding-bottom: calc(104px + var(--safe-bottom)); }
 .avatar-wrap .cam { position: absolute; bottom: 2px; right: 2px; width: 28px; height: 28px; border-radius: 50%;
   display: grid; place-items: center; font-size: .9rem; background: var(--accent-grad);
   border: 2px solid var(--bg); box-shadow: var(--shadow-sm); }
+
+/* Dock a 6 voci: compatta icone/etichette */
+.tabbar { max-width: 560px; padding: 7px; gap: 2px; }
+.tab { min-height: 50px; padding: 5px 0; border-radius: 15px; }
+.tab span { font-size: 1.18rem; }
+.tab small { font-size: .58rem; }
