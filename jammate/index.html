@@ -2,6 +2,9 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
+  <!-- Sicurezza: Content-Security-Policy (script solo locali, nessun inline; blocca XSS/script esterni) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; upgrade-insecure-requests" />
+  <meta name="referrer" content="no-referrer" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
   <meta name="theme-color" content="#0e0f1a" />
   <meta name="description" content="JamMate — trova musicisti vicino a te e suona insieme." />

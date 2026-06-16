@@ -36,6 +36,8 @@ function save() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
 const $ = (sel, root = document) => root.querySelector(sel);
 const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// Sicurezza: consenti solo URL http/https nei link utente (blocca javascript:, data:, ecc.)
+const safeUrl = (u) => { const s = String(u ?? "").trim(); return /^https?:\/\//i.test(s) ? s : "#"; };
 const hash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
 
 function toast(msg) {
@@ -138,7 +140,7 @@ function affDetailHtml(aff) {
   const r = aff.res;
   const insight = r.insight ? `<div class="insight"><span class="insight-emoji">💡</span><div style="flex:1">
       <b>L'insight di JamMate</b><br>${esc(r.insight.text)}
-      <div class="resonate">Ti risuona? <button onclick="jmResonate(1,this)">👍 Sì</button><button onclick="jmResonate(0,this)">🤔 No</button></div>
+      <div class="resonate">Ti risuona? <button data-resonate="1">👍 Sì</button><button data-resonate="0">🤔 No</button></div>
     </div></div>` : "";
   const bars = r.parts.slice(0, 5).map(p => `
     <span class="lbl">${esc(p.label)}</span><span class="num">${p.pct}%</span>
@@ -482,7 +484,7 @@ function openProfileSheet(p) {
       ${p.genres.map(g => `<span class="tag">${esc(g)}</span>`).join("")}
     </div>
     ${p.bio ? `<div class="section-label">Bio</div><p style="margin:0;line-height:1.5">${esc(p.bio)}</p>` : ""}
-    ${links.length ? `<div class="section-label">Ascolta</div><div class="linkrow">${links.map(([k, v]) => `<a href="${esc(v)}" target="_blank" rel="noopener">${({ youtube: "▶ YouTube", spotify: "♫ Spotify", instagram: "◎ Instagram" })[k] || k}</a>`).join("")}</div>` : ""}
+    ${links.length ? `<div class="section-label">Ascolta</div><div class="linkrow">${links.map(([k, v]) => `<a href="${esc(safeUrl(v))}" target="_blank" rel="noopener noreferrer">${({ youtube: "▶ YouTube", spotify: "♫ Spotify", instagram: "◎ Instagram" })[k] || k}</a>`).join("")}</div>` : ""}
     <div class="section-label">Repertorio & tonalità</div>
     ${p.repertoire.length ? p.repertoire.map(r => `
       <div class="rep-item"><div><div class="song">${esc(r.title)}</div><div class="artist">${esc(r.artist || "")}</div></div>
@@ -498,6 +500,7 @@ function openProfileSheet(p) {
     closeModal(); navigate("messages"); setTimeout(() => openChat(p), 50);
   };
   if (matched) $("#endorseBtn").onclick = () => openEndorseSheet(p);
+  document.querySelectorAll("#modalRoot [data-resonate]").forEach(b => b.onclick = () => jmResonate(+b.dataset.resonate, b));
 }
 
 // ---------- Endorsement post-jam (reputazione reale) ----------
