@@ -443,3 +443,35 @@ body { padding-bottom: calc(104px + var(--safe-bottom)); }
 .tab { min-height: 50px; padding: 5px 0; border-radius: 15px; }
 .tab span { font-size: 1.18rem; }
 .tab small { font-size: .58rem; }
+
+/* =========================================================================
+   POLISH v4 — Cassetta attrezzi PRO + fix pulsante AVVIA del metronomo
+   ========================================================================= */
+.tool-card { background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02)), var(--surface-solid);
+  border: 1px solid var(--border-soft); border-radius: 22px; box-shadow: var(--shadow); }
+
+/* Numero BPM a gradiente */
+.bpm-display { letter-spacing: -3px; line-height: 1; }
+.bpm-display #bpmVal { background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Beat dots con glow */
+.beat-dots i { width: 14px; height: 14px; border: 1px solid var(--border-soft); background: rgba(255,255,255,.06); transition: transform .06s ease, background .06s, box-shadow .06s; }
+.beat-dots i.on { background: var(--accent); box-shadow: 0 0 14px var(--accent); transform: scale(1.6); }
+.beat-dots i.accent.on { background: var(--accent-2); box-shadow: 0 0 14px var(--accent-2); }
+
+/* FIX: la dimensione fissa vale solo per i tasti +/-, non per il pulsante Avvia */
+.bpm-controls { gap: 14px; margin: 14px 0 6px; }
+.bpm-controls button:not(.btn) {
+  width: 54px; height: 54px; min-width: 54px; border-radius: 16px; font-size: 1.5rem; font-weight: 700;
+  background: rgba(255,255,255,.06); border: 1px solid var(--border-soft); color: var(--text);
+  display: grid; place-items: center; transition: transform .1s, background .2s;
+}
+.bpm-controls button:not(.btn):active { transform: scale(.9); background: rgba(255,255,255,.12); }
+.bpm-controls .btn { flex: 1; width: auto; height: 54px; font-size: 1.05rem; }
+
+/* Tuner PRO */
+.tuner-note { background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.tuner-meter { height: 14px; background: rgba(255,255,255,.06); border-color: var(--border-soft); }
+.tuner-meter.in .needle { box-shadow: 0 0 16px var(--ok); }
+.ref-tones button { background: rgba(255,255,255,.06); border-color: var(--border-soft); transition: transform .1s; }
+.ref-tones button:active { transform: scale(.94); }
