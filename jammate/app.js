@@ -689,6 +689,7 @@ function renderProfile(app) {
       <input type="text" id="lkIg" placeholder="Link Instagram" value="${esc(m.links.instagram)}">
       <button class="btn" id="saveProfile" style="margin-top:20px">Salva profilo</button>
       <button class="btn secondary" id="resetApp" style="margin-top:10px">Azzera dati demo</button>
+      <p class="view-sub" style="text-align:center;margin-top:18px;opacity:.55">JamMate · prototipo v0.1.0 🎸</p>
     </div>`));
   paintMyRep();
   $("#meAvatar").onclick = pickPhoto;
