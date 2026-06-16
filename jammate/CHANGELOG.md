@@ -5,7 +5,11 @@
   direttamente, ma passa da `JM.Storage`. Pronto a puntare ad Azure senza
   riscrivere la UI. Nessun cambiamento visibile per l'utente.
 - **Contratto backend** (`backend/`): `openapi.yaml` (API) + `schema.sql`
-  (database PostgreSQL) + architettura Azure (`ARCHITECTURE_AZURE.md`).
+  (database PostgreSQL) + architettura Azure (`ARCHITECTURE_AZURE.md`) +
+  **ADR** delle scelte (`backend/adr/`) + scheletro **Azure Functions**
+  (`backend/functions/`) + guida di **deploy** (`backend/DEPLOY_AZURE.md`).
+- **Client API** (`api.js`, `JM.Api`): collega la PWA agli endpoint del backend
+  (fetch + token Entra), pronto da attivare al deploy. Non ancora in uso.
 
 ## v0.1.0 — Prototipo MVP (2026-06-16)
 Prima versione dimostrativa (PWA, dati locali, pagamenti simulati).
