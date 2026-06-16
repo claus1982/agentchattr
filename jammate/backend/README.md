@@ -10,6 +10,10 @@ codice server. Servono per costruire l'app multi‑utente reale su Azure
   webhook Stripe). È il riferimento condiviso fra frontend e backend.
 - **`schema.sql`** — Schema del database PostgreSQL (Azure Database for
   PostgreSQL, regione UE). Eseguibile così com'è per creare le tabelle.
+- **`adr/`** — Architecture Decision Records: il **perché** di ogni scelta
+  (Azure, Functions, PostgreSQL, Entra, Stripe, ecc.) con alternative scartate.
+- **`functions/`** — Scheletro delle Azure Functions (Node.js v4) generato dal
+  contratto: auth Entra, accesso DB e primi endpoint, pronto da completare.
 
 ## Come si lega al frontend
 Il frontend ora passa **sempre** da `../storage.js` (data layer). Oggi quel
