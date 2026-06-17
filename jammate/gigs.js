@@ -41,7 +41,7 @@ function renderBandSide(box) {
   const band = myBand();
   if (!band) {
     box.appendChild(el(`<div class="empty">Non hai ancora registrato una band.<br>Creane una per offrirti alle serate locali. 🎸</div>`));
-    const b = el(`<button class="btn">＋ Crea la tua band</button>`); b.onclick = openCreateBand; box.appendChild(b);
+    const b = el(`<button class="btn">＋ Crea la tua band</button>`); b.onclick = () => openCreateBand(); box.appendChild(b);
     return;
   }
   // Card band con badge "Pronta & Disponibile"
@@ -85,7 +85,7 @@ function renderVenueSide(box) {
   const v = state.myVenue;
   if (!v) {
     box.appendChild(el(`<div class="empty">Hai un locale o organizzi eventi?<br>Crea il profilo per cercare e prenotare band. 🏢</div>`));
-    const b = el(`<button class="btn">＋ Crea profilo locale</button>`); b.onclick = openCreateVenue; box.appendChild(b);
+    const b = el(`<button class="btn">＋ Crea profilo locale</button>`); b.onclick = () => openCreateVenue(); box.appendChild(b);
     return;
   }
   const c = el(`<div class="card flat">
