@@ -7,6 +7,34 @@
 > Riferimenti: architettura in `../ARCHITECTURE_AZURE.md`, scelte in `adr/`,
 > contratto API in `openapi.yaml`, schema DB in `schema.sql`, codice in `functions/`.
 
+## 🚀 Deploy automatico (1 comando) — consigliato
+Per chi ha già **Azure CLI + Functions Core Tools + psql** sul PC, c'è uno script
+che fa tutto (infrastruttura, schema DB, pubblicazione Functions) via
+Infrastructure‑as‑Code (`infra/main.bicep`):
+
+```bash
+az login
+export PG_ADMIN_PASSWORD='UnaPasswordMoltoForte!'
+# opzionali ora (si possono impostare dopo aver creato l'app Entra, Passo 3):
+# export ENTRA_AUDIENCE='...'  ENTRA_ISSUER='...'  ENTRA_JWKS_URI='...'
+cd jammate/backend/infra
+./deploy.sh jammate westeurope
+```
+
+Lo script crea il resource group `rg-jammate`, provisiona **PostgreSQL Flexible**,
+**Function App** (Node 20) con Storage e Application Insights, **Key Vault** (con la
+connection string letta via Managed Identity), apre temporaneamente il firewall DB
+per il tuo IP, **carica `schema.sql`** e **pubblica le Functions**. Alla fine stampa
+l'URL dell'API e l'endpoint `/v1/health`.
+
+> Lo schema è già stato **validato su PostgreSQL 16 reale** (23 tabelle, vincoli e
+> default OK). Il resto richiede la *tua* subscription: esegui lo script dal tuo PC
+> (o da una pipeline) con `az login` fatto.
+>
+> Preferisci procedere a clic dal **portale**? Segui la guida manuale qui sotto. ⤵️
+
+---
+
 ## Prima di iniziare (10 minuti)
 - [ ] Accesso a una **subscription Azure** (o un *resource group* dedicato) con permessi di creare risorse — chiedi all'IT aziendale se la licenza è enterprise.
 - [ ] Browser su **https://portal.azure.com** (login con l'account aziendale).
