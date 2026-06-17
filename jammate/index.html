@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Sicurezza: Content-Security-Policy (script solo locali, nessun inline; blocca XSS/script esterni) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; upgrade-insecure-requests" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#0e0f1a" />
+  <meta name="description" content="JamMate — trova musicisti vicino a te e suona insieme." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>JamMate — Trova chi suona con te</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-logo">🎸</span>
+      <span class="brand-name">JamMate</span>
+    </div>
+    <button id="cityBtn" class="city-chip" title="Cambia città">📍 <span id="cityLabel">Milano</span></button>
+  </header>
+
+  <main id="app"></main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab" data-view="discover"><span>🔥</span><small>Scopri</small></button>
+    <button class="tab" data-view="board"><span>📌</span><small>Bacheca</small></button>
+    <button class="tab" data-view="palco"><span>🎤</span><small>Palco</small></button>
+    <button class="tab" data-view="messages"><span>💬</span><small>Chat</small><i class="dot" id="chatDot" hidden></i></button>
+    <button class="tab" data-view="tools"><span>🧰</span><small>Strumenti</small></button>
+    <button class="tab" data-view="profile"><span>🎵</span><small>Profilo</small></button>
+  </nav>
+
+  <div id="modalRoot"></div>
+
+  <script src="storage.js"></script>
+  <script src="api.js"></script>
+  <script src="data.js"></script>
+  <script src="affinity.js"></script>
+  <script src="gigs.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

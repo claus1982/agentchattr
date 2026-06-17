@@ -1,0 +1,21 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
+    "// NOTA": "In produzione questi valori vengono da Azure Key Vault via Managed Identity, NON da file.",
+    "PG_CONNECTION_STRING": "postgres://USER:PASSWORD@HOST:5432/jammate?sslmode=require",
+
+    "// Microsoft Entra External ID": "valori del tenant CIAM",
+    "ENTRA_ISSUER": "https://<tenant>.ciamlogin.com/<tenant-id>/v2.0",
+    "ENTRA_AUDIENCE": "<application-client-id>",
+    "ENTRA_JWKS_URI": "https://<tenant>.ciamlogin.com/<tenant-id>/discovery/v2.0/keys",
+
+    "STRIPE_SECRET_KEY": "sk_test_...",
+    "STRIPE_WEBHOOK_SECRET": "whsec_..."
+  },
+  "Host": {
+    "CORS": "http://localhost:3000,https://jammate.example"
+  }
+}
