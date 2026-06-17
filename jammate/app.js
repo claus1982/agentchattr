@@ -23,7 +23,7 @@ function freshState() {
     },
     liked: [], passed: [], matches: ["u2"],
     bands: [], myVenue: null, bookings: [], metroPresets: [],
-    posts: [], jams: [], teacher: null, lessonBookings: [],
+    posts: [], jams: [], teacher: null, lessonBookings: [], contacts: [],
     notifications: [
       { id: "seed1", icon: "🎤", text: "Giulia Ferri ha visto il tuo profilo.", ts: Date.now() - 2 * 3600e3, read: false, view: "discover" },
       { id: "seed2", icon: "🗺️", text: "Nuova jam vicino a te: “Jam jazz al parco”.", ts: Date.now() - 5 * 3600e3, read: false, view: "board" },
@@ -653,7 +653,8 @@ function openEventSheet(ev) {
     <div class="loc">${ev.authorAvatar} ${esc(ev.author)} · 📍 ${esc(ev.city)} · ${ev.distanceKm} km</div>
     <div class="tags" style="margin-top:8px">${ev.genres.map(g => `<span class="tag">${esc(g)}</span>`).join("")}</div>
     <div class="section-label">Descrizione</div><p style="margin:0;line-height:1.5">${esc(ev.description)}</p>
-    <div class="section-label">Slot strumenti</div><div id="slotList"></div>`);
+    <div class="section-label">Slot strumenti</div><div id="slotList"></div>
+    <button class="btn secondary" id="evMsg" style="margin-top:16px">✉️ Scrivi a ${esc(ev.author)}</button>`);
   const sl = $("#slotList");
   ev.slots.forEach((s) => {
     const row = el(`<div class="rep-item">
@@ -663,6 +664,7 @@ function openEventSheet(ev) {
     if (btn) btn.onclick = () => { s.filled = true; s.applicant = state.me.name; save(); toast(`Candidatura inviata: ${s.instrument} 🎉`); closeModal(); renderBoard2(); };
     sl.appendChild(row);
   });
+  $("#evMsg").onclick = () => { closeModal(); dmContact({ id: "org:" + ev.id, name: ev.author, avatar: ev.authorAvatar, color: GRADS[hash(ev.author) % GRADS.length], city: ev.city, distanceKm: ev.distanceKm }); };
 }
 function renderBoard2() { if (currentView === "board") { $("#app").innerHTML = ""; renderBoard($("#app")); } }
 
@@ -699,14 +701,24 @@ function openCreateSheet() {
 }
 
 // ---------- Vista: Chat ----------
+// Un "contatto" è un profilo (state.profiles) oppure un contatto sintetico
+// (autore di bacheca/feed) salvato in state.contacts.
+function findContact(id) { return state.profiles.find(p => p.id === id) || (state.contacts || []).find(p => p.id === id) || null; }
+function dmContact(c) {
+  state.contacts = state.contacts || [];
+  if (!findContact(c.id)) state.contacts.push(c);
+  if (!state.matches.includes(c.id)) state.matches.push(c.id);
+  if (!state.messages[c.id]) state.messages[c.id] = [];
+  save(); navigate("messages"); setTimeout(() => openChat(findContact(c.id) || c), 50);
+}
 function renderMessages(app) {
   app.appendChild(el(`<div><h1 class="view-title">Messaggi</h1>
     <p class="view-sub">Accordati senza scambiare il numero di telefono.</p><div id="threads"></div></div>`));
   const box = $("#threads");
-  const ids = state.matches.filter(id => state.profiles.find(p => p.id === id));
-  if (!ids.length) return box.innerHTML = `<div class="empty">Nessuna conversazione.<br>Fai un <b>match</b> in "Scopri" per iniziare a chattare 🔥</div>`;
+  const ids = state.matches.filter(id => findContact(id));
+  if (!ids.length) return box.innerHTML = `<div class="empty">Nessuna conversazione.<br>Fai un <b>match</b> in "Scopri" o scrivi a un autore in Feed/Bacheca 🔥</div>`;
   ids.forEach(id => {
-    const p = state.profiles.find(x => x.id === id);
+    const p = findContact(id);
     const thread = state.messages[id] || [];
     const last = thread[thread.length - 1];
     const c = el(`<div class="card"><div class="card-head">
@@ -723,7 +735,7 @@ function openChat(p) {
   openModal(`
     <div class="card-head" style="margin-bottom:12px">
       ${avatarTag(p)}
-      <div class="meta"><div class="name">${esc(p.name)}</div><div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km</div></div>
+      <div class="meta"><div class="name">${esc(p.name)}</div><div class="loc">📍 ${esc(p.city || "")}${p.distanceKm != null ? " · " + p.distanceKm + " km" : ""}</div></div>
     </div>
     <div class="msg-thread" id="thread"></div>
     <div class="composer"><input type="text" id="msgInput" placeholder="Scrivi un messaggio…" /><button class="btn small" id="sendMsg">Invia</button></div>`);

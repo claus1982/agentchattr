@@ -1,6 +1,11 @@
 # JamMate — Changelog
 
 ## Non rilasciato — Verso il backend reale su Azure
+- **Feed più ricco**: selettore **emoji** nel composer, upload **GIF** (animazione
+  preservata), e **reazioni multiple** (👍❤️🔥😂🎸👏😮) al posto del solo like.
+- **Messaggi privati dagli autori**: pulsante **✉️ Scrivi** sui post del Feed,
+  sugli annunci della Bacheca e sull'host delle Jam. Gli autori non-profilo
+  (organizzatori/locali) diventano contatti dedicati nella sezione Messaggi.
 - **Fix "Solo slot liberi"** (Bacheca): il filtro era una `<label>` con checkbox e
   l'`onclick` invertiva una variabile; l'attivazione della label rilanciava il click
   → doppio toggle, nessun effetto visibile. Ora è un pulsante singolo: funziona.

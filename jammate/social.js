@@ -16,15 +16,20 @@ function timeAgo(ts) {
   const d = Math.floor(h / 24); if (d < 7) return d + " g fa";
   try { return new Date(ts).toLocaleDateString("it-IT", { day: "numeric", month: "short" }); } catch (e) { return ""; }
 }
-// Selettore immagine generico → dataURL (ridimensiona, JPEG). Riuso per il feed.
+// Selettore immagine generico → dataURL. Le GIF vengono mantenute così come sono
+// (per preservare l'animazione); le altre immagini sono ridimensionate in JPEG.
 function pickImage(cb, maxDim) {
   maxDim = maxDim || 1000;
-  const inp = el(`<input type="file" accept="image/*" style="display:none">`);
+  const inp = el(`<input type="file" accept="image/*,image/gif" style="display:none">`);
   document.body.appendChild(inp);
   inp.onchange = () => {
     const f = inp.files && inp.files[0]; if (!f) { inp.remove(); return; }
     const rd = new FileReader();
     rd.onload = () => {
+      if (f.type === "image/gif") { // GIF: niente canvas, mantieni l'animazione
+        if (rd.result.length > 6000000) { toast("GIF troppo pesante (max ~4MB)"); inp.remove(); return; }
+        cb(rd.result); inp.remove(); return;
+      }
       const img = new Image();
       img.onload = () => {
         const r = Math.min(1, maxDim / Math.max(img.width, img.height));
@@ -41,6 +46,28 @@ function pickImage(cb, maxDim) {
   };
   inp.click();
 }
+// Inserisce testo (emoji) nella textarea alla posizione del cursore.
+function insertAtCursor(ta, text) {
+  if (!ta) return;
+  const s = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+  const e = ta.selectionEnd != null ? ta.selectionEnd : ta.value.length;
+  ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+  ta.focus(); const pos = s + text.length; try { ta.setSelectionRange(pos, pos); } catch (er) {}
+}
+// Reazioni: normalizza il vecchio formato (likes/likedByMe) e calcola il riepilogo.
+function normReactions(p) {
+  if (!p.reactions) { p.reactions = {}; if (p.likes) p.reactions["👍"] = p.likes; p.myReaction = p.likedByMe ? "👍" : (p.myReaction || null); }
+  if (p.myReaction === undefined) p.myReaction = null;
+  return p;
+}
+function reactionSummary(p) {
+  normReactions(p);
+  const counts = Object.assign({}, p.reactions);
+  if (p.myReaction) counts[p.myReaction] = (counts[p.myReaction] || 0) + 1;
+  const emojis = Object.keys(counts).filter(e => counts[e] > 0).sort((a, b) => counts[b] - counts[a]);
+  return { emojis: emojis.slice(0, 3), total: emojis.reduce((s, e) => s + counts[e], 0) };
+}
+function setReaction(p, emoji) { normReactions(p); p.myReaction = p.myReaction === emoji ? null : emoji; save(); }
 
 // ------------------------------------------------------------- Notifiche (#10)
 function notify(icon, text, opts) {
@@ -65,10 +92,13 @@ function openNotifications() {
 }
 
 // ------------------------------------------------------------- Feed sociale (#11)
+// Reazioni disponibili (#più reazioni) ed emoji per il composer (#più icone).
+const REACTIONS = ["👍", "❤️", "🔥", "😂", "🎸", "👏", "😮"];
+const POST_EMOJIS = ["🎸", "🎹", "🥁", "🎤", "🎷", "🎺", "🎻", "🎶", "🎵", "🔥", "❤️", "😂", "😍", "🤘", "👏", "🙌", "✨", "🍺", "📅", "📍", "🎉", "😎", "💯", "🚀"];
 const SEED_POSTS = [
-  { id: "sp1", authorId: "u2", name: "Giulia Ferri", avatar: "🎤", color: GRADS[4], text: "Ieri sera prima serata con la nuova cover band 🎶 pubblico fantastico, grazie a tutti! Prossima data tra due settimane.", image: "", ts: Date.now() - 3 * 3600e3, likes: 14, likedByMe: false, comments: [{ name: "Luca Greco", text: "Grandi! 🔥", ts: Date.now() - 2 * 3600e3 }] },
-  { id: "sp2", authorId: "u7", name: "Tommaso Riva", avatar: "🎷", color: GRADS[5], text: "Cerco gente per una jam jazz domenica al parco. Si improvvisa, si chiacchiera, si beve qualcosa. Chi c'è?", image: "", ts: Date.now() - 9 * 3600e3, likes: 8, likedByMe: false, comments: [] },
-  { id: "sp3", authorId: "u1", name: "Marco Bassani", avatar: "🎸", color: GRADS[0], text: "Nuovo ampli, nuovo suono. Provato stamattina in sala, che goduria 🤘", image: "", ts: Date.now() - 28 * 3600e3, likes: 22, likedByMe: false, comments: [{ name: "Davide Conti", text: "Quale hai preso?", ts: Date.now() - 26 * 3600e3 }] }
+  { id: "sp1", authorId: "u2", name: "Giulia Ferri", avatar: "🎤", color: GRADS[4], text: "Ieri sera prima serata con la nuova cover band 🎶 pubblico fantastico, grazie a tutti! Prossima data tra due settimane.", image: "", ts: Date.now() - 3 * 3600e3, reactions: { "🔥": 9, "❤️": 4, "👏": 3 }, myReaction: null, comments: [{ name: "Luca Greco", text: "Grandi! 🔥", ts: Date.now() - 2 * 3600e3 }] },
+  { id: "sp2", authorId: "u7", name: "Tommaso Riva", avatar: "🎷", color: GRADS[5], text: "Cerco gente per una jam jazz domenica al parco. Si improvvisa, si chiacchiera, si beve qualcosa 🍺 Chi c'è?", image: "", ts: Date.now() - 9 * 3600e3, reactions: { "👍": 6, "🎸": 2 }, myReaction: null, comments: [] },
+  { id: "sp3", authorId: "u1", name: "Marco Bassani", avatar: "🎸", color: GRADS[0], text: "Nuovo ampli, nuovo suono. Provato stamattina in sala, che goduria 🤘", image: "", ts: Date.now() - 28 * 3600e3, reactions: { "🔥": 14, "😮": 5, "🎸": 3 }, myReaction: null, comments: [{ name: "Davide Conti", text: "Quale hai preso?", ts: Date.now() - 26 * 3600e3 }] }
 ];
 function feedPosts() { return [...(state.posts || []), ...SEED_POSTS]; }
 function renderFeed(app) {
@@ -78,22 +108,28 @@ function renderFeed(app) {
     <div class="card flat" id="composer">
       <div class="card-head">${avatarTag(state.me)}<div class="meta"><div class="name">${esc(state.me.name || "Tu")}</div></div></div>
       <textarea id="postText" placeholder="Condividi qualcosa con la community…"></textarea>
+      <div class="emoji-bar" id="emojiBar" hidden>${POST_EMOJIS.map(e => `<button type="button" data-e="${e}">${e}</button>`).join("")}</div>
       <div id="postPreview"></div>
       <div class="row-between" style="margin-top:8px">
-        <button class="btn small secondary" id="postPhoto">🖼️ Foto</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn small secondary" id="postEmoji">😀</button>
+          <button class="btn small secondary" id="postPhoto">🖼️ Foto / GIF</button>
+        </div>
         <button class="btn small" id="postSend">Pubblica</button>
       </div>
     </div>
     <div id="feedList"></div>
   </div>`));
   let pendingImg = "";
+  $("#postEmoji").onclick = () => { const b = $("#emojiBar"); b.hidden = !b.hidden; };
+  $("#emojiBar").querySelectorAll("[data-e]").forEach(b => b.onclick = () => insertAtCursor($("#postText"), b.dataset.e));
   $("#postPhoto").onclick = () => pickImage(d => { pendingImg = d; $("#postPreview").innerHTML = `<img class="post-img" src="${d}" alt="anteprima">`; });
   $("#postSend").onclick = () => {
     const text = $("#postText").value.trim();
     if (!text && !pendingImg) return toast("Scrivi qualcosa o aggiungi una foto");
     const me = state.me;
     state.posts = state.posts || [];
-    const post = { id: "p" + Date.now(), authorId: "me", name: me.name || "Tu", avatar: me.avatar, color: me.color, photo: me.photo || "", text, image: pendingImg, ts: Date.now(), likes: 0, likedByMe: false, comments: [] };
+    const post = { id: "p" + Date.now(), authorId: "me", name: me.name || "Tu", avatar: me.avatar, color: me.color, photo: me.photo || "", text, image: pendingImg, ts: Date.now(), reactions: {}, myReaction: null, comments: [] };
     state.posts.unshift(post); save();
     $("#postText").value = ""; $("#postPreview").innerHTML = ""; pendingImg = "";
     toast("Pubblicato 🎉"); renderFeedBody();
@@ -107,26 +143,44 @@ function renderFeedBody() {
   feedPosts().forEach(p => box.appendChild(postCard(p)));
 }
 function postCard(p) {
+  const s = reactionSummary(p);
+  const canDm = p.authorId && p.authorId !== "me";
   const c = el(`<div class="card post">
     <div class="card-head">${avatarTag(p)}<div class="meta">
       <div class="name">${esc(p.name)}</div><div class="loc">${timeAgo(p.ts)}</div></div></div>
     ${p.text ? `<div class="post-text">${esc(p.text)}</div>` : ""}
-    ${p.image ? `<img class="post-img" src="${p.image}" alt="foto del post">` : ""}
+    ${p.image ? `<img class="post-img" src="${p.image}" alt="contenuto del post">` : ""}
+    <div class="react-picker" hidden>${REACTIONS.map(r => `<button data-r="${r}">${r}</button>`).join("")}</div>
     <div class="post-actions">
-      <button class="post-act${p.likedByMe ? " liked" : ""}" data-like>👍 <span>${(p.likes || 0) + (p.likedByMe ? 1 : 0)}</span></button>
+      <button class="post-act${p.myReaction ? " reacted" : ""}" data-react>${s.emojis.length ? s.emojis.join("") : "😀"} <span>${s.total}</span></button>
       <button class="post-act" data-cmt>💬 <span>${(p.comments || []).length}</span></button>
+      ${canDm ? `<button class="post-act" data-dm>✉️ Scrivi</button>` : ""}
     </div>
     <div class="post-comments" hidden></div>
   </div>`);
-  const likeBtn = c.querySelector("[data-like]");
-  likeBtn.onclick = () => {
-    p.likedByMe = !p.likedByMe; save();
-    likeBtn.classList.toggle("liked", p.likedByMe);
-    likeBtn.querySelector("span").textContent = (p.likes || 0) + (p.likedByMe ? 1 : 0);
-  };
+  const picker = c.querySelector(".react-picker"), reactBtn = c.querySelector("[data-react]");
+  reactBtn.onclick = () => { picker.hidden = !picker.hidden; };
+  picker.querySelectorAll("[data-r]").forEach(b => b.onclick = () => {
+    setReaction(p, b.dataset.r); picker.hidden = true;
+    const ss = reactionSummary(p);
+    reactBtn.classList.toggle("reacted", !!p.myReaction);
+    reactBtn.innerHTML = `${ss.emojis.length ? ss.emojis.join("") : "😀"} <span>${ss.total}</span>`;
+  });
   const cmtBox = c.querySelector(".post-comments");
   c.querySelector("[data-cmt]").onclick = () => { cmtBox.hidden = !cmtBox.hidden; if (!cmtBox.hidden) paintComments(p, cmtBox, c); };
+  if (canDm) c.querySelector("[data-dm]").onclick = () => dmAuthor(p.authorId, p.name);
   return c;
+}
+// Messaggio privato a un autore di feed/bacheca.
+function startDM(p) {
+  if (!state.matches.includes(p.id)) state.matches.push(p.id);
+  if (!state.messages[p.id]) state.messages[p.id] = [];
+  save(); navigate("messages"); setTimeout(() => openChat(p), 50);
+}
+function dmAuthor(profileId, fallbackName) {
+  const p = (state.profiles || []).find(x => x.id === profileId);
+  if (p) return startDM(p);
+  toast("Profilo non disponibile per il messaggio");
 }
 function paintComments(p, box, card) {
   p.comments = p.comments || [];
@@ -146,9 +200,11 @@ function paintComments(p, box, card) {
 function simulateEngagement(postId) {
   setTimeout(() => {
     const p = (state.posts || []).find(x => x.id === postId); if (!p) return;
-    p.likes = (p.likes || 0) + 1 + Math.floor(Math.random() * 4);
+    normReactions(p);
+    const r = REACTIONS[Math.floor(Math.random() * REACTIONS.length)];
+    p.reactions[r] = (p.reactions[r] || 0) + 1 + Math.floor(Math.random() * 3);
     const who = SEED_PROFILES[Math.floor(Math.random() * SEED_PROFILES.length)];
-    save(); notify("👍", `A ${who.name.split(" ")[0]} e altri piace il tuo post.`, { view: "feed" });
+    save(); notify(r, `${who.name.split(" ")[0]} ha reagito ${r} al tuo post.`, { view: "feed" });
     if (currentView === "feed") renderFeedBody();
   }, 2200);
   setTimeout(() => {
@@ -233,7 +289,9 @@ function openJamSheet(j) {
     <div class="aff-note" style="margin-top:12px">${j.accessMode === "approval" ? "🔒 Jam <b>su approvazione</b>: l'host conferma le richieste." : "✅ Jam <b>aperta</b>: gli idonei entrano subito."}</div>
     ${isHost && reqs.length ? `<div class="section-label">Richieste</div><div id="jamReqs">${reqs.map((p, i) => `<div class="lvl-row"><span class="lvl-inst">${esc(p.name)}</span><span><button class="btn small" data-ok="${i}">✓ Accetta</button> <button class="btn small secondary" data-no="${i}">✕</button></span></div>`).join("")}</div>` : ""}
     ${jamActionHtml(j, elig, my)}
+    ${!isHost && j.hostId ? `<button class="btn secondary" id="jamDm" style="margin-top:10px">✉️ Scrivi a ${esc(j.host.split(" ")[0])}</button>` : ""}
   `);
+  if ($("#jamDm")) $("#jamDm").onclick = () => { closeModal(); dmAuthor(j.hostId, j.host); };
   if ($("#jamAct")) $("#jamAct").onclick = () => jamJoin(j);
   if ($("#jamCancel")) $("#jamCancel").onclick = () => { j.participants = (j.participants || []).filter(x => !x.me); save(); closeModal(); toast("Annullato"); rerenderBoardMap(); };
   if (isHost && reqs.length) {

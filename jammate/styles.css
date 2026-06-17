@@ -558,3 +558,17 @@ body { padding-bottom: calc(104px + var(--safe-bottom)); }
 
 /* ===== Accordatore: nota letta (trasposizione) ===== */
 .tuner-written { text-align: center; color: var(--accent); font-weight: 800; margin-top: -2px; margin-bottom: 4px; }
+
+/* ===== Feed: emoji bar + reaction picker ===== */
+.emoji-bar, .react-picker {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 8px;
+  background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; margin: 8px 0;
+}
+.emoji-bar[hidden], .react-picker[hidden] { display: none; }
+.emoji-bar button, .react-picker button {
+  background: none; border: none; font-size: 1.35rem; line-height: 1; cursor: pointer;
+  padding: 5px 6px; border-radius: 8px; transition: transform .1s, background .15s;
+}
+.emoji-bar button:active, .react-picker button:active { transform: scale(1.25); background: var(--card-hi); }
+.react-picker { justify-content: space-between; }
+.post-act.reacted { color: var(--accent); border-color: var(--accent); }
