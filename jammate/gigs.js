@@ -25,14 +25,17 @@ function renderPalco(app) {
       <button class="btn small secondary" id="bookingsBtn">📋 Prenotazioni${bookingsPending() ? " · " + bookingsPending() : ""}</button></div>
     <p class="view-sub">Band che si offrono per serate, e locali che cercano musica. Prenotazione con conferma e recensioni a due lati.</p>
     <div class="segmented">
-      <button data-m="band" class="${seg === "band" ? "on" : ""}">🎸 La mia band</button>
-      <button data-m="venue" class="${seg === "venue" ? "on" : ""}">🏢 Sono un locale</button>
+      <button data-m="band" class="${seg === "band" ? "on" : ""}">🎸 Band</button>
+      <button data-m="venue" class="${seg === "venue" ? "on" : ""}">🏢 Locale</button>
+      <button data-m="lessons" class="${seg === "lessons" ? "on" : ""}">🎓 Lezioni</button>
     </div>
     <div id="palcoBody"></div>
   </div>`));
   app.querySelectorAll(".segmented button").forEach(b => b.onclick = () => { state.ui.palcoMode = b.dataset.m; save(); rerenderPalco(); });
   $("#bookingsBtn").onclick = openBookings;
-  if (seg === "band") renderBandSide($("#palcoBody")); else renderVenueSide($("#palcoBody"));
+  if (seg === "band") renderBandSide($("#palcoBody"));
+  else if (seg === "lessons") window.renderLessons($("#palcoBody"));
+  else renderVenueSide($("#palcoBody"));
 }
 function rerenderPalco() { if (currentView === "palco") { $("#app").innerHTML = ""; renderPalco($("#app")); } }
 
@@ -247,6 +250,7 @@ function simulate(id, status, msg) {
   setTimeout(() => {
     const bk = (state.bookings || []).find(x => x.id === id); if (!bk) return;
     bk.status = status; save(); toast(msg);
+    if (typeof notify === "function") notify("🎤", msg, { view: "palco" });
     rerenderPalco(); if ($(".modal")) openBookings();
   }, 1600);
 }
@@ -373,6 +377,7 @@ function simulateInvite(inviteId) {
     save();
     toast(accepted ? `🎉 ${inv.name.split(" ")[0]} è entrato in ${band.name}!`
                    : `${inv.name.split(" ")[0]} ha declinato l'invito`);
+    if (typeof notify === "function") notify(accepted ? "🎸" : "🙁", accepted ? `${inv.name.split(" ")[0]} è entrato in ${band.name}!` : `${inv.name.split(" ")[0]} ha declinato l'invito.`, { view: "palco" });
     rerenderPalco();
   }, 1800);
 }

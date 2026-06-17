@@ -23,8 +23,14 @@ function freshState() {
     },
     liked: [], passed: [], matches: ["u2"],
     bands: [], myVenue: null, bookings: [], metroPresets: [],
+    posts: [], jams: [], teacher: null, lessonBookings: [],
+    notifications: [
+      { id: "seed1", icon: "🎤", text: "Giulia Ferri ha visto il tuo profilo.", ts: Date.now() - 2 * 3600e3, read: false, view: "discover" },
+      { id: "seed2", icon: "🗺️", text: "Nuova jam vicino a te: “Jam jazz al parco”.", ts: Date.now() - 5 * 3600e3, read: false, view: "board" },
+      { id: "seed3", icon: "👋", text: "Benvenuto! Completa il Profilo Profondo per sbloccare la Sintonia.", ts: Date.now() - 26 * 3600e3, read: false, view: "profile" }
+    ],
     filters: { instrument: "", level: "", genre: "", distance: 30 },
-    ui: { discoverMode: "match", palcoMode: "band", unread: false },
+    ui: { discoverMode: "match", palcoMode: "band", boardMode: "list", unread: false, notifSeen: true },
     onboarded: false
   };
 }
@@ -191,11 +197,16 @@ function navigate(view) {
 }
 function render() {
   const app = $("#app"); app.innerHTML = "";
-  updateChatDot();
+  updateChatDot(); updateBell();
   if (!state.onboarded) return renderOnboarding(app);
-  ({ discover: renderDiscover, board: renderBoard, palco: window.renderPalco, messages: renderMessages, tools: renderTools, profile: renderProfile }[currentView] || renderDiscover)(app);
+  ({ discover: renderDiscover, feed: window.renderFeed, board: renderBoard, palco: window.renderPalco, messages: renderMessages, tools: renderTools, profile: renderProfile }[currentView] || renderDiscover)(app);
 }
 function updateChatDot() { const d = $("#chatDot"); if (d) d.hidden = !state.ui.unread; }
+function updateBell() {
+  const d = $("#bellDot"); if (!d) return;
+  const unread = (state.notifications || []).filter(n => !n.read).length;
+  d.hidden = unread === 0; d.dataset.count = unread > 9 ? "9+" : String(unread);
+}
 
 // ---------- Onboarding ----------
 function renderOnboarding(app) {
@@ -377,7 +388,7 @@ function decide(p, action, skipAnim) {
     if (matched && !state.matches.includes(p.id)) {
       state.matches.push(p.id);
       if (!state.messages[p.id]) state.messages[p.id] = [{ from: "them", text: opener(p) }];
-      state.ui.unread = true; save(); showMatch(p); return;
+      state.ui.unread = true; save(); notify("🔥", `Nuovo match con ${p.name.split(" ")[0]}! Scrivigli in chat.`, { view: "messages" }); showMatch(p); return;
     }
   } else {
     if (!state.passed.includes(p.id)) state.passed.push(p.id);
@@ -574,10 +585,25 @@ function boardMatches(ev) {
          (!boardFilter.forMe || ev.slots.some(s => (m.instruments || []).includes(s.instrument)) || ev.genres.some(g => (m.genres || []).includes(g)));
 }
 function renderBoard(app) {
+  const mode = state.ui.boardMode || "list";
   app.appendChild(el(`
     <div>
-      <div class="row-between"><h1 class="view-title">Bacheca annunci</h1>
+      <div class="row-between"><h1 class="view-title">Bacheca</h1>
       <button class="btn small" id="newAd">＋ Nuovo</button></div>
+      <div class="segmented">
+        <button data-bm="list" class="${mode === "list" ? "on" : ""}">📋 Annunci</button>
+        <button data-bm="map" class="${mode === "map" ? "on" : ""}">🗺️ Mappa jam</button>
+      </div>
+      <div id="boardBody"></div>
+    </div>`));
+  app.querySelectorAll(".segmented button").forEach(b => b.onclick = () => { state.ui.boardMode = b.dataset.bm; save(); renderBoard2(); });
+  $("#newAd").onclick = () => (mode === "map" ? openCreateJam() : openCreateSheet());
+  if (mode === "map") return window.renderJamMap($("#boardBody"));
+  renderBoardList($("#boardBody"));
+}
+function renderBoardList(box) {
+  box.appendChild(el(`
+    <div>
       <p class="view-sub">Band in cerca di membri e jam vicino a te. Candidati agli slot liberi.</p>
       <div class="filters">
         <div class="filter-row">
@@ -591,7 +617,6 @@ function renderBoard(app) {
       </div>
       <div id="eventList"></div>
     </div>`));
-  $("#newAd").onclick = () => openCreateSheet();
   $("#bfIns").onchange = e => { boardFilter.instrument = e.target.value; paintEvents(); };
   $("#bfGen").onchange = e => { boardFilter.genre = e.target.value; paintEvents(); };
   $("#bfForMe").onclick = () => { boardFilter.forMe = !boardFilter.forMe; renderBoard2(); };
@@ -958,18 +983,38 @@ function tapTempo() {
 }
 
 // ----- Accordatore (microfono + toni di riferimento) -----
-const tuner = { ctx: null, analyser: null, stream: null, raf: null, osc: null };
+const tuner = { ctx: null, analyser: null, stream: null, raf: null, osc: null, a4: 440, transposeIdx: 0, hist: [] };
 const NOTE_IT = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"];
 const GUITAR = [["Mi", 82.41], ["La", 110.0], ["Re", 146.83], ["Sol", 196.0], ["Si", 246.94], ["Mi", 329.63]];
+// Strumenti traspositori (#13): semitoni da aggiungere alla nota reale per ottenere
+// la nota LETTA dallo strumentista (es. Si♭ legge un tono sopra il suono reale).
+const TRANSPOSERS = [
+  { name: "Do — non traspositore", semi: 0 },
+  { name: "Si♭ — tromba, clarinetto, sax tenore", semi: 2 },
+  { name: "Mi♭ — sax contralto / baritono", semi: 9 },
+  { name: "Fa — corno francese", semi: 7 }
+];
+function noteName(midi) { const n = ((midi % 12) + 12) % 12; return NOTE_IT[n] + (Math.floor(midi / 12) - 1); }
 function renderTuner(box) {
   box.innerHTML = "";
   box.appendChild(el(`
     <div class="tool-card">
       <div class="tuner-note" id="tNote">—</div>
+      <div class="tuner-written" id="tWritten" hidden></div>
       <div class="tuner-cents" id="tFreq">Avvia per accordare</div>
       <div class="tuner-meter" id="tMeter"><div class="center"></div><div class="needle" id="tNeedle"></div></div>
       <button class="btn" id="tStart" style="margin-top:14px">🎤 Avvia accordatore</button>
       <p class="view-sub" id="tHint" style="margin-top:10px">Useremo il microfono solo per rilevare la nota. Niente registrazioni.</p>
+    </div>
+    <div class="tool-card">
+      <div class="section-label" style="margin-top:0">Strumento traspositore</div>
+      <p class="view-sub">Mostra la <b>nota reale</b> (concertistica) e la <b>nota letta</b> dal tuo strumento.</p>
+      <select id="tTrans">${TRANSPOSERS.map((t, i) => `<option value="${i}"${i === tuner.transposeIdx ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+      <div class="row-between" style="margin-top:14px">
+        <label class="field" style="margin:0">Calibrazione (La₄)</label>
+        <span class="range-val" id="a4Val">${tuner.a4} Hz</span>
+      </div>
+      <input type="range" id="a4Range" min="430" max="446" step="1" value="${tuner.a4}">
     </div>
     <div class="tool-card">
       <div class="section-label" style="margin-top:0">Toni di riferimento (chitarra)</div>
@@ -979,6 +1024,8 @@ function renderTuner(box) {
       </div>
     </div>`));
   $("#tStart").onclick = startTuner;
+  $("#tTrans").onchange = e => { tuner.transposeIdx = +e.target.value; };
+  $("#a4Range").oninput = e => { tuner.a4 = +e.target.value; $("#a4Val").textContent = tuner.a4 + " Hz"; };
   $("#refTones").querySelectorAll("button").forEach(b => b.onclick = () => playRef(+b.dataset.freq, b));
 }
 async function startTuner() {
@@ -1007,16 +1054,24 @@ function detectPitch() {
   const loop = () => {
     tuner.analyser.getFloatTimeDomainData(buf);
     const freq = autoCorrelate(buf, tuner.ctx.sampleRate);
-    const noteEl = $("#tNote"), freqEl = $("#tFreq"), meter = $("#tMeter"), needle = $("#tNeedle");
+    const noteEl = $("#tNote"), writtenEl = $("#tWritten"), freqEl = $("#tFreq"), meter = $("#tMeter"), needle = $("#tNeedle");
     if (noteEl && freq > 0) {
-      const midi = Math.round(12 * Math.log2(freq / 440) + 69);
-      const ref = 440 * Math.pow(2, (midi - 69) / 12);
+      const a4 = tuner.a4 || 440;
+      const midi = Math.round(12 * Math.log2(freq / a4) + 69);
+      const ref = a4 * Math.pow(2, (midi - 69) / 12);
       const cents = Math.round(1200 * Math.log2(freq / ref));
-      noteEl.textContent = NOTE_IT[((midi % 12) + 12) % 12];
-      freqEl.textContent = `${freq.toFixed(1)} Hz · ${cents > 0 ? "+" : ""}${cents} cent`;
-      needle.style.left = `${50 + Math.max(-50, Math.min(50, cents))}%`;
-      meter.classList.toggle("in", Math.abs(cents) <= 5);
-    } else if (freqEl) { freqEl.textContent = "…"; }
+      // Mediana delle ultime letture: smorza il jitter e migliora la precisione (#14).
+      tuner.hist.push(cents); if (tuner.hist.length > 6) tuner.hist.shift();
+      const cs = [...tuner.hist].sort((a, b) => a - b)[Math.floor(tuner.hist.length / 2)];
+      noteEl.textContent = noteName(midi);
+      const tr = TRANSPOSERS[tuner.transposeIdx || 0];
+      if (tr && tr.semi) { writtenEl.hidden = false; writtenEl.textContent = `letta (${tr.name.split(" ")[0]}): ${noteName(midi + tr.semi)}`; }
+      else { writtenEl.hidden = true; }
+      const tuned = Math.abs(cs) <= 5;
+      freqEl.textContent = `${freq.toFixed(1)} Hz · ${cs > 0 ? "+" : ""}${cs} cent${tuned ? " · intonato ✓" : cs < 0 ? " · cala ↓" : " · cresce ↑"}`;
+      needle.style.left = `${50 + Math.max(-50, Math.min(50, cs))}%`;
+      meter.classList.toggle("in", tuned);
+    } else if (freqEl) { freqEl.textContent = "…"; tuner.hist.length = 0; }
     tuner.raf = requestAnimationFrame(loop);
   };
   loop();
@@ -1147,6 +1202,8 @@ $("#cityBtn").onclick = () => {
   const c = prompt("In quale città vuoi cercare?", state.me.city);
   if (c) { state.me.city = c.trim(); $("#cityLabel").textContent = state.me.city; save(); }
 };
+// ---------- Notifiche ----------
+$("#bellBtn").onclick = () => openNotifications();
 
 // ---------- Init ----------
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => navigate(t.dataset.view));

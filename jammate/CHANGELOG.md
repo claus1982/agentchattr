@@ -1,6 +1,18 @@
 # JamMate — Changelog
 
 ## Non rilasciato — Verso il backend reale su Azure
+- **Feed sociale** (#11): nuova tab 🌐 Feed con post (testo + foto), like e
+  commenti; engagement simulato. Nuovo modulo `social.js`.
+- **Notifiche** (#10): campanella 🔔 in header con centro notifiche e badge
+  non‑letti, alimentata da match, inviti band, jam, prenotazioni, like/commenti.
+- **Mappa jam geolocalizzate** (#9): Bacheca › 🗺️ Mappa jam con segnaposti
+  (verdi = idonei), creazione jam con accesso ibrido (aperta / su approvazione),
+  idoneità per strumento e livello, richieste con approvazione dell'host.
+- **Sezione Lezioni** (#12): Palco › 🎓 Lezioni con insegnanti, slot a
+  calendario, prenotazione + pagamento (simulato) e modalità "diventa insegnante".
+- **Accordatore evoluto** (#13/#14): trasposizione per strumenti traspositori
+  (Do/Si♭/Mi♭/Fa, nota reale vs letta), calibrazione La₄ 430–446 Hz, lettura in
+  cent con verso e smorzamento del jitter.
 - **Onboarding con livello per‑strumento** (feedback #5): in registrazione ogni
   strumento scelto ottiene la sua riga *strumento → livello* (niente più livello
   unico).

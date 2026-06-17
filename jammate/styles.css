@@ -496,3 +496,64 @@ body { padding-bottom: calc(104px + var(--safe-bottom)); }
 .tuner-meter.in .needle { box-shadow: 0 0 16px var(--ok); }
 .ref-tones button { background: rgba(255,255,255,.06); border-color: var(--border-soft); transition: transform .1s; }
 .ref-tones button:active { transform: scale(.94); }
+
+/* ===== Notifiche (campanella header) ===== */
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.icon-btn {
+  position: relative; background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-radius: 999px; width: 38px; height: 38px;
+  font-size: 1.05rem; cursor: pointer; display: grid; place-items: center;
+}
+.icon-btn:active { transform: scale(.94); }
+.icon-btn .dot { position: absolute; top: 6px; right: 7px; width: 9px; height: 9px; background: var(--accent-2); border-radius: 50%; border: 2px solid var(--bg); }
+.notif-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 12px; background: var(--bg-soft); border: 1px solid var(--border); margin-bottom: 8px; }
+.notif-row.unread { border-color: var(--accent); }
+.notif-row.tap { cursor: pointer; }
+.notif-row.tap:active { transform: scale(.99); }
+.notif-icon { font-size: 1.3rem; line-height: 1.4; }
+.notif-time { color: var(--muted); font-size: .76rem; margin-top: 3px; }
+
+/* ===== Feed sociale ===== */
+#composer textarea { min-height: 64px; margin-top: 10px; }
+.post .post-text { line-height: 1.5; margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
+.post-img { width: 100%; border-radius: 12px; margin-top: 10px; display: block; }
+#postPreview .post-img { max-height: 220px; object-fit: cover; }
+.post-actions { display: flex; gap: 10px; margin-top: 12px; }
+.post-act { flex: 1; background: var(--bg-soft); border: 1px solid var(--border); color: var(--muted); border-radius: 12px; padding: 8px; font-weight: 700; cursor: pointer; font-size: .9rem; }
+.post-act.liked { color: var(--accent); border-color: var(--accent); }
+.post-act:active { transform: scale(.97); }
+.post-comments { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.comment { font-size: .9rem; line-height: 1.45; margin-bottom: 7px; }
+.add-comment { display: flex; gap: 8px; margin-top: 8px; }
+.add-comment input { flex: 1; }
+
+/* ===== Mappa jam ===== */
+.jam-map {
+  position: relative; height: 220px; border-radius: var(--radius); margin-bottom: 8px; overflow: hidden;
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(120px 120px at 30% 35%, rgba(124,92,255,.18), transparent 70%),
+    radial-gradient(140px 140px at 75% 70%, rgba(255,92,138,.16), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.04) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 1px, transparent 1px 28px),
+    var(--bg-soft);
+}
+.jam-me { position: absolute; left: 50%; top: 52%; transform: translate(-50%,-50%); font-size: 1.5rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+.jam-pin {
+  position: absolute; transform: translate(-50%,-50%); width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer; font-size: 1.05rem;
+  background: var(--card); border: 2px solid var(--muted); box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+.jam-pin.ok { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(52,211,153,.25), 0 4px 12px rgba(0,0,0,.4); }
+.jam-pin:active { transform: translate(-50%,-50%) scale(.9); }
+
+/* ===== Lezioni (slot a calendario) ===== */
+.slot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.slot-btn {
+  background: var(--bg-soft); border: 1px solid var(--border); color: var(--text);
+  border-radius: 12px; padding: 12px; font-weight: 700; font-size: .85rem; cursor: pointer; line-height: 1.3;
+}
+.slot-btn:active { transform: scale(.96); }
+
+/* ===== Accordatore: nota letta (trasposizione) ===== */
+.tuner-written { text-align: center; color: var(--accent); font-weight: 800; margin-top: -2px; margin-bottom: 4px; }

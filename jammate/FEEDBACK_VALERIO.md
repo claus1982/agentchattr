@@ -29,15 +29,16 @@ Triage del feedback del primo tester. Legenda stato:
 | 7 | **Contatore jam a cui hai partecipato** | ✅ Fatto | Campo `jamCount` sul profilo, incrementato quando segni una **serata completata** in Palco. Sul profilo compare un **badge a traguardi** (✨ Pronto → 🎸 Esordiente → 🥉/🥈/🥇 → 🏆 Leggenda). |
 | 8 | **Metronomo: migliorie** | ✅ Fatto | Già presenti accenti, battute (2/4…6/4) e tap‑tempo. Aggiunti **suoni selezionabili** (Beep, Click, Legno, Cowbell) con anteprima e **salvataggio preset** (nome + BPM + battute + suono, con carica/elimina). |
 
-## 🔭 Roadmap (più grandi / con backend Azure)
-| # | Richiesta | Priorità | Note |
+## 🔭 Funzionalità grandi — ora nel prototipo PWA (si agganceranno al backend Azure)
+Tutte implementate con dati locali; al deploy del backend ogni sezione collega le sue API.
+| # | Richiesta | Stato | Dov'è / come funziona |
 |---|---|---|---|
-| 9 | **Mappa con jam geolocalizzate** | Alta ⭐ | Pubblichi "suono il giorno X alle Y" e appare sulla mappa; gli altri vedono le jam vicine, in **verde quelle a cui possono partecipare** in base a strumento/livello. **Accesso ibrido (deciso): chi crea la jam sceglie per ogni evento** se è "aperta agli idonei" (entri subito) o "su approvazione" (richiesta → conferma dell'autore). Richiede: geolocalizzazione, mappa, eventi con data/luogo, regole di idoneità + flag `accessMode`. Si appoggia alle tabelle `open_nights`/eventi del DB. |
-| 10 | **Notifiche in tempo reale** | Alta | Inviti band, nuove jam vicine, candidature, messaggi. Si realizza con Azure Web PubSub + notifiche push (vedi ADR 0007). |
-| 11 | **Feed sociale** (post e foto di jam/attività) | Media | Bacheca sociale con post, foto, like/commenti. Nuove tabelle (posts, media su Blob Storage) + moderazione. |
-| 12 | **Sezione Lezioni** con calendario | Media | Profili insegnante, disponibilità, prenotazione su calendario. **Deciso: prenotazione + pagamento online fin dal primo rilascio** (riusa Stripe, vedi ADR 0006: escrow/commissione come per le serate). |
-| 13 | **Accordatore: trasposizione in tempo reale** | Media | **Deciso: implementiamo un default ora**, da affinare con Valerio. Default (vedi sotto). |
-| 14 | **Accordatore: verifica precisione note** | Alta | Validare l'algoritmo di pitch detection su note reali (test strumentali) e tarare la soglia di stabilità. |
+| 9 | **Mappa con jam geolocalizzate** | ✅ Prototipo | **Bacheca › 🗺️ Mappa jam**: segnaposti sulla mappa, **verdi** quelli adatti ai tuoi strumenti/livello. Crei una jam scegliendo l'**accesso ibrido** (`aperta` = entri subito · `su approvazione` = richiesta→conferma host). Idoneità per strumento + livello minimo. Modellato in `schema.sql` (`jams`, `jam_participants`). |
+| 10 | **Notifiche** | ✅ Prototipo | **Campanella 🔔 in alto**: match, inviti band, jam, prenotazioni, like/commenti. Centro notifiche con badge non-letti. Col backend → Azure Web PubSub + push (ADR 0007). |
+| 11 | **Feed sociale** | ✅ Prototipo | Nuova tab **🌐 Feed**: pubblichi post con **testo + foto**, like e commenti; engagement simulato. Col backend → tabelle posts/commenti + media su Blob Storage (ADR 0010) + moderazione. |
+| 12 | **Sezione Lezioni** | ✅ Prototipo | **Palco › 🎓 Lezioni**: trovi insegnanti, scegli uno **slot a calendario**, **prenoti e paghi** (pagamento simulato, commissione 10%). Puoi anche **diventare insegnante** e pubblicare disponibilità. Modellato in `schema.sql` (`teacher_profiles`, `lesson_slots`, `lesson_bookings`), pagamento Stripe (ADR 0006). |
+| 13 | **Accordatore: trasposizione** | ✅ Prototipo | **Strumenti › Accordatore**: selettore strumento traspositore (Do / Si♭ / Mi♭ / Fa); mostra **nota reale** e **nota letta**. |
+| 14 | **Accordatore: precisione** | ✅ Prototipo | **Calibrazione La₄ (430–446 Hz)**, lettura in **cent** con verso (cala ↓ / cresce ↑ / intonato ✓) e **smorzamento del jitter** (mediana) per una lettura più stabile. Resta da validare su strumenti reali insieme a Valerio. |
 
 ---
 
