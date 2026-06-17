@@ -1,6 +1,11 @@
 # JamMate — Changelog
 
 ## Non rilasciato — Verso il backend reale su Azure
+- **Fix "Solo slot liberi"** (Bacheca): il filtro era una `<label>` con checkbox e
+  l'`onclick` invertiva una variabile; l'attivazione della label rilanciava il click
+  → doppio toggle, nessun effetto visibile. Ora è un pulsante singolo: funziona.
+- **QA rifiniture**: tab bar robusta con 7 voci (i nomi lunghi non sforano più),
+  azioni header (🔔) nascoste durante l'onboarding.
 - **Feed sociale** (#11): nuova tab 🌐 Feed con post (testo + foto), like e
   commenti; engagement simulato. Nuovo modulo `social.js`.
 - **Notifiche** (#10): campanella 🔔 in header con centro notifiche e badge

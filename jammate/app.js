@@ -198,6 +198,7 @@ function navigate(view) {
 function render() {
   const app = $("#app"); app.innerHTML = "";
   updateChatDot(); updateBell();
+  const ha = document.querySelector(".header-actions"); if (ha) ha.hidden = !state.onboarded;
   if (!state.onboarded) return renderOnboarding(app);
   ({ discover: renderDiscover, feed: window.renderFeed, board: renderBoard, palco: window.renderPalco, messages: renderMessages, tools: renderTools, profile: renderProfile }[currentView] || renderDiscover)(app);
 }
@@ -612,7 +613,7 @@ function renderBoardList(box) {
         </div>
         <div class="filter-row">
           <button class="btn small ${boardFilter.forMe ? "" : "secondary"}" id="bfForMe">🎯 Per me</button>
-          <label class="chip ${boardFilter.openOnly ? "on" : ""}" id="bfOpen" style="display:flex;align-items:center;gap:6px;justify-content:center"><input type="checkbox" ${boardFilter.openOnly ? "checked" : ""} style="pointer-events:none"> Solo slot liberi</label>
+          <button class="btn small ${boardFilter.openOnly ? "" : "secondary"}" id="bfOpen">🎫 Solo slot liberi</button>
         </div>
       </div>
       <div id="eventList"></div>
