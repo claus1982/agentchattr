@@ -15,6 +15,7 @@
   --radius: 16px;
   --shadow: 0 8px 30px rgba(0,0,0,.35);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark; /* controlli nativi (select, date picker, scrollbar) in tema scuro */
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -63,6 +64,12 @@ label.field { display: block; font-size: .78rem; color: var(--muted); margin-bot
 select, input[type=text], input[type=date], textarea {
   width: 100%; background: var(--bg-soft); color: var(--text);
   border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; font-size: .95rem; font-family: inherit;
+  color-scheme: dark;
+}
+/* Menu a tendina nativo: forza sfondo scuro e testo chiaro sulle opzioni
+   (altrimenti su alcuni browser/OS il popup resta bianco e il testo invisibile). */
+select option, select optgroup {
+  background: var(--card); color: var(--text);
 }
 textarea { resize: vertical; min-height: 84px; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
