@@ -61,6 +61,8 @@ function renderBandSide(box) {
   $("#availTgl").onchange = e => { band.available = e.target.checked; save(); rerenderPalco(); };
   $("#editBand").onclick = () => openCreateBand(band);
 
+  renderBandInvites(box, band);
+
   box.appendChild(el(`<div class="section-label">Locali che cercano una band</div>`));
   SEED_VENUES.forEach(v => box.appendChild(venueOpenCard(v, band)));
 }
@@ -172,7 +174,7 @@ function openCreateBand(existing) {
   $("#bSave").onclick = () => {
     const name = $("#bName").value.trim(); if (!name) return toast("Dai un nome alla band");
     if (!selM.length) return toast("Seleziona almeno uno strumento della formazione");
-    const band = Object.assign(existing || { id: "mb" + Date.now(), avatar: "🎸", color: GRADS[Math.floor(Math.random() * GRADS.length)], rating: 0, ratings: 0, available: true }, {
+    const band = Object.assign(existing || { id: "mb" + Date.now(), avatar: "🎸", color: GRADS[Math.floor(Math.random() * GRADS.length)], rating: 0, ratings: 0, available: true, invites: [] }, {
       name, city: $("#bCity").value.trim() || state.me.city, fee: $("#bFee").value.trim(), tagline: $("#bTag").value.trim(),
       genres: selG, members: selM, repertoire: $("#bRep").value.split("\n").map(s => s.trim()).filter(Boolean)
     });
@@ -312,4 +314,93 @@ function openReviewSheet(bk) {
   };
 }
 
+// --------------------------------------------------- Inviti musicisti in band (#6)
+// Dai match/profili in "Scopri" inviti un musicista a entrare nella tua band.
+// Prototipo: invito locale con accettazione simulata. Col backend (band_invites)
+// diventa invito reale + accettazione del destinatario.
+const INVITE_STATUS = {
+  pending:  { t: "In attesa", c: "warn" },
+  accepted: { t: "In formazione ✓", c: "ok" },
+  declined: { t: "Ha declinato", c: "" }
+};
+
+function openInviteToBand(p) {
+  const band = myBand();
+  if (!band) {
+    closeModal(); toast("Crea prima la tua band per invitare musicisti 🎸");
+    state.ui.palcoMode = "band"; navigate("palco"); return;
+  }
+  const existing = (band.invites || []).find(i => i.profileId === p.id && i.status !== "declined");
+  if (existing) {
+    toast(existing.status === "accepted"
+      ? `${p.name.split(" ")[0]} è già nella tua formazione`
+      : `Hai già invitato ${p.name.split(" ")[0]}`);
+    return;
+  }
+  const instr = (p.instruments && p.instruments.length) ? p.instruments : INSTRUMENTS;
+  openModal(`
+    <h2>Invita in “${esc(band.name)}” 🎸</h2>
+    <div class="aff-note">Proponi a <b>${esc(p.name)}</b> di entrare in formazione. Nel prototipo la risposta è simulata; col backend riceverà una notifica e potrà accettare.</div>
+    <label class="field" style="margin-top:12px">Ruolo / strumento</label>
+    <select id="invInstr">${options(instr, instr[0])}</select>
+    <label class="field" style="margin-top:10px">Messaggio (opzionale)</label>
+    <textarea id="invMsg" placeholder="Ciao! Ci piacerebbe averti con noi…"></textarea>
+    <button class="btn" id="invSend" style="margin-top:16px">Invia invito 📨</button>
+  `);
+  $("#invSend").onclick = () => {
+    const inv = {
+      id: "inv" + Date.now(), profileId: p.id, name: p.name,
+      avatar: p.avatar, color: p.color, photo: p.photo || "",
+      instrument: $("#invInstr").value, message: $("#invMsg").value.trim(),
+      status: "pending", ts: Date.now()
+    };
+    band.invites = band.invites || []; band.invites.unshift(inv); save();
+    closeModal(); toast("Invito inviato 📨");
+    state.ui.palcoMode = "band"; navigate("palco");
+    simulateInvite(inv.id);
+  };
+}
+
+function simulateInvite(inviteId) {
+  setTimeout(() => {
+    const band = myBand(); if (!band) return;
+    const inv = (band.invites || []).find(i => i.id === inviteId);
+    if (!inv || inv.status !== "pending") return;
+    const accepted = Math.random() < 0.75;
+    inv.status = accepted ? "accepted" : "declined";
+    // se accetta e copre uno strumento non presente, lo aggiunge alla formazione
+    if (accepted && !band.members.includes(inv.instrument)) band.members.push(inv.instrument);
+    save();
+    toast(accepted ? `🎉 ${inv.name.split(" ")[0]} è entrato in ${band.name}!`
+                   : `${inv.name.split(" ")[0]} ha declinato l'invito`);
+    rerenderPalco();
+  }, 1800);
+}
+
+function renderBandInvites(box, band) {
+  box.appendChild(el(`<div class="section-label">Formazione & inviti</div>`));
+  const invites = (band.invites || []).slice();
+  if (!invites.length) {
+    box.appendChild(el(`<div class="aff-note">Nessun musicista invitato. Apri un profilo in <b>Scopri</b> e premi “🎸 Invita in band”.</div>`));
+    return;
+  }
+  invites.forEach(inv => {
+    const st = INVITE_STATUS[inv.status] || { t: inv.status, c: "" };
+    const removable = inv.status !== "pending";
+    const c = el(`<div class="card flat" style="margin-bottom:8px">
+      <div class="card-head">${avatarTag(inv)}<div class="meta">
+        <div class="name">${esc(inv.name)} <span class="tag ${st.c === "ok" ? "lvl" : st.c === "warn" ? "accent" : ""}">${st.t}</span></div>
+        <div class="loc">🎸 ${esc(inv.instrument)}</div>
+      </div><button class="btn small secondary" data-act>${removable ? "Rimuovi" : "Annulla"}</button></div>
+    </div>`);
+    c.querySelector("[data-act]").onclick = () => {
+      band.invites = (band.invites || []).filter(i => i.id !== inv.id); save();
+      toast(removable ? "Rimosso dalla formazione" : "Invito annullato");
+      rerenderPalco();
+    };
+    box.appendChild(c);
+  });
+}
+
 window.renderPalco = renderPalco;
+window.openInviteToBand = openInviteToBand;

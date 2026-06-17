@@ -8,6 +8,12 @@ un **acconto in escrow**, applicare la **commissione JamMate (5%)** e pagare
 (payout) la band. Gestire dati di carta in proprio impone l'oneroso ambito
 **PCI‑DSS**.
 
+Lo stesso meccanismo serve alla **Sezione Lezioni** (#12): per decisione di
+prodotto (17/06/2026) le lezioni nascono con **prenotazione + pagamento online
+fin dal primo rilascio** — l'allievo paga lo slot, l'insegnante riceve il payout
+al netto della commissione. Stesso modello Connect/escrow del Palco
+(tabelle `lesson_bookings.stripe_pi_id`, `fee_cents`).
+
 ## Decisione
 Usiamo **Stripe** con **Stripe Connect** (payout ai destinatari) e PaymentIntent
 per acconto/saldo. I dati di carta non transitano né sono salvati da noi: nel DB

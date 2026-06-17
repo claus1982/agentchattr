@@ -505,12 +505,14 @@ function openProfileSheet(p) {
     ${endoBlock(p.endo)}
     ${affDetailHtml(aff)}
     <div style="margin-top:22px"><button class="btn" id="contactBtn">💬 ${matched ? "Scrivi a" : "Contatta"} ${esc(p.name.split(" ")[0])}</button></div>
+    <button class="btn secondary" id="inviteBandBtn" style="margin-top:10px">🎸 Invita nella tua band</button>
     ${matched ? `<button class="btn secondary" id="endorseBtn" style="margin-top:10px">⭐ Lascia un endorsement (post-jam)</button>` : ""}
   `);
   $("#contactBtn").onclick = () => {
     if (!state.matches.includes(p.id)) { state.matches.push(p.id); if (!state.messages[p.id]) state.messages[p.id] = []; save(); }
     closeModal(); navigate("messages"); setTimeout(() => openChat(p), 50);
   };
+  $("#inviteBandBtn").onclick = () => openInviteToBand(p);
   if (matched) $("#endorseBtn").onclick = () => openEndorseSheet(p);
   document.querySelectorAll("#modalRoot [data-resonate]").forEach(b => b.onclick = () => jmResonate(+b.dataset.resonate, b));
 }

@@ -198,6 +198,87 @@ CREATE TABLE messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------- Inviti in band (musicista invitato a entrare in formazione) ----------
+-- Modella il quick-win frontend "Invita in band": un admin della band invita un
+-- musicista a coprire un ruolo; lui accetta/rifiuta. All'accettazione diventa
+-- una riga in band_members. Nel prototipo l'accettazione è simulata.
+CREATE TABLE band_invites (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  band_id    UUID NOT NULL REFERENCES bands(id) ON DELETE CASCADE,
+  invitee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  inviter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role       TEXT,                                  -- strumento/ruolo proposto
+  message    TEXT,
+  status     TEXT NOT NULL DEFAULT 'pending'
+             CHECK (status IN ('pending','accepted','declined','cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  responded_at TIMESTAMPTZ,
+  UNIQUE (band_id, invitee_id)
+);
+
+-- ---------- Jam geolocalizzate (mappa, #9) ----------
+-- access_mode (DECISO: ibrido) — l'autore sceglie per ogni jam:
+--   'open'     = ogni musicista idoneo partecipa subito;
+--   'approval' = l'idoneo invia richiesta, l'autore conferma.
+CREATE TABLE jams (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  host_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title       TEXT,
+  starts_at   TIMESTAMPTZ NOT NULL,
+  lat         DOUBLE PRECISION,                     -- geolocalizzazione
+  lng         DOUBLE PRECISION,
+  place       TEXT,
+  genres      TEXT[] NOT NULL DEFAULT '{}',
+  -- idoneità: strumenti cercati e livello minimo richiesto
+  instruments TEXT[] NOT NULL DEFAULT '{}',
+  min_level   SMALLINT,                             -- indice su LEVELS (0..5)
+  access_mode TEXT NOT NULL DEFAULT 'open' CHECK (access_mode IN ('open','approval')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE jam_participants (
+  jam_id    UUID NOT NULL REFERENCES jams(id) ON DELETE CASCADE,
+  user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- per access_mode='open' nasce 'joined'; per 'approval' nasce 'requested'
+  status    TEXT NOT NULL DEFAULT 'requested'
+            CHECK (status IN ('requested','joined','declined')),
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (jam_id, user_id)
+);
+
+-- ---------- Lezioni (#12) — DECISO: prenotazione + pagamento da subito ----------
+CREATE TABLE teacher_profiles (
+  user_id     UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  instruments TEXT[] NOT NULL DEFAULT '{}',
+  bio         TEXT,
+  hourly_cents INT NOT NULL,                        -- tariffa oraria
+  city        TEXT,
+  online      BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE lesson_slots (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  starts_at  TIMESTAMPTZ NOT NULL,
+  duration_min INT NOT NULL DEFAULT 60,
+  is_booked  BOOLEAN NOT NULL DEFAULT false
+);
+
+CREATE TABLE lesson_bookings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slot_id     UUID NOT NULL REFERENCES lesson_slots(id) ON DELETE CASCADE,
+  student_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status      TEXT NOT NULL DEFAULT 'pending_payment'
+              CHECK (status IN ('pending_payment','confirmed','completed','cancelled','refunded')),
+  -- pagamento online da subito (Stripe, stesso modello escrow/commissione delle serate)
+  amount_cents INT NOT NULL,
+  fee_cents    INT,
+  stripe_pi_id TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (slot_id)
+);
+
 -- ---------- Indici per le query più frequenti ----------
 CREATE INDEX idx_profiles_city     ON musician_profiles(city);
 CREATE INDEX idx_profiles_genres   ON musician_profiles USING GIN (genres);
@@ -208,3 +289,8 @@ CREATE INDEX idx_bookings_band     ON bookings(band_id);
 CREATE INDEX idx_bookings_venue    ON bookings(venue_id);
 CREATE INDEX idx_bookings_status   ON bookings(status);
 CREATE INDEX idx_messages_thread   ON messages(thread_id, created_at);
+CREATE INDEX idx_band_invites_invitee ON band_invites(invitee_id, status);
+CREATE INDEX idx_jams_starts       ON jams(starts_at);
+CREATE INDEX idx_jams_geo          ON jams(lat, lng);
+CREATE INDEX idx_jam_parts_user    ON jam_participants(user_id);
+CREATE INDEX idx_lesson_slots_teacher ON lesson_slots(teacher_id, starts_at);

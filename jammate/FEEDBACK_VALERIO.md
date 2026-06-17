@@ -25,26 +25,35 @@ Triage del feedback del primo tester. Legenda stato:
 | # | Richiesta | Priorità | Note di realizzazione |
 |---|---|---|---|
 | 5 | **Livello per‑strumento anche in onboarding** | Media | Oggi l'onboarding usa un livello unico applicato a tutti; poi lo affini nel profilo. Da estendere con selettore per‑strumento in fase di registrazione. |
-| 6 | **Invitare musicisti nella band** | Alta | Dai match/seguiti, invita in band. Nel prototipo: lista inviti locale; con backend diventa invito reale + accettazione. |
+| 6 | **Invitare musicisti nella band** | ✅ Fatto | Dal dettaglio di un musicista in "Scopri" → **🎸 Invita nella tua band**: scegli ruolo/strumento e messaggio. In "Palco › La mia band" vedi la sezione **Formazione & inviti** con stato (in attesa / in formazione / declinato); puoi annullare o rimuovere. Nel prototipo l'accettazione è simulata; col backend (tabella `band_invites`) diventa invito reale + notifica + accettazione. |
 | 7 | **Contatore jam a cui hai partecipato** | Media | Campo `jamCount` sul profilo + incremento quando una jam/serata è confermata; badge sul profilo. |
 | 8 | **Metronomo: migliorie** | Media | Es. accenti/battute (4/4, 3/4…), tap‑tempo, suoni selezionabili, salvataggio preset. |
 
 ## 🔭 Roadmap (più grandi / con backend Azure)
 | # | Richiesta | Priorità | Note |
 |---|---|---|---|
-| 9 | **Mappa con jam geolocalizzate** | Alta ⭐ | Pubblichi "suono il giorno X alle Y" e appare sulla mappa; gli altri vedono le jam vicine, in **verde quelle a cui possono partecipare** in base a strumento/livello. Richiede: geolocalizzazione, mappa, eventi con data/luogo, regole di idoneità. Si appoggia alle tabelle `open_nights`/eventi del DB. |
+| 9 | **Mappa con jam geolocalizzate** | Alta ⭐ | Pubblichi "suono il giorno X alle Y" e appare sulla mappa; gli altri vedono le jam vicine, in **verde quelle a cui possono partecipare** in base a strumento/livello. **Accesso ibrido (deciso): chi crea la jam sceglie per ogni evento** se è "aperta agli idonei" (entri subito) o "su approvazione" (richiesta → conferma dell'autore). Richiede: geolocalizzazione, mappa, eventi con data/luogo, regole di idoneità + flag `accessMode`. Si appoggia alle tabelle `open_nights`/eventi del DB. |
 | 10 | **Notifiche in tempo reale** | Alta | Inviti band, nuove jam vicine, candidature, messaggi. Si realizza con Azure Web PubSub + notifiche push (vedi ADR 0007). |
 | 11 | **Feed sociale** (post e foto di jam/attività) | Media | Bacheca sociale con post, foto, like/commenti. Nuove tabelle (posts, media su Blob Storage) + moderazione. |
-| 12 | **Sezione Lezioni** con calendario | Media | Profili insegnante, disponibilità, prenotazione su calendario, eventualmente pagamento (riusa Stripe). |
-| 13 | **Accordatore: trasposizione in tempo reale** | Media | Da approfondire con Valerio ("te la spiego con calma"): trasposizione per strumenti traspositori (es. sax in Mib/Sib) mostrando la nota letta vs scritta. |
+| 12 | **Sezione Lezioni** con calendario | Media | Profili insegnante, disponibilità, prenotazione su calendario. **Deciso: prenotazione + pagamento online fin dal primo rilascio** (riusa Stripe, vedi ADR 0006: escrow/commissione come per le serate). |
+| 13 | **Accordatore: trasposizione in tempo reale** | Media | **Deciso: implementiamo un default ora**, da affinare con Valerio. Default (vedi sotto). |
 | 14 | **Accordatore: verifica precisione note** | Alta | Validare l'algoritmo di pitch detection su note reali (test strumentali) e tarare la soglia di stabilità. |
 
 ---
 
-## Domande aperte per Valerio
-- **Mappa (9)**: le jam pubbliche sono aperte a tutti gli idonei o servono inviti/approvazione dell'autore?
-- **Trasposizione (13)**: quando hai tempo, spiegaci il flusso preciso (strumento di partenza → tonalità desiderata, cosa vuoi vedere a schermo).
-- **Lezioni (12)**: solo prenotazione o anche pagamento online fin da subito?
+## ✅ Decisioni prese (17/06/2026)
+Risposte alle domande aperte, da Claudio (product owner). Queste fissano lo scope per backend e roadmap.
+
+- **Mappa (9) — Accesso ibrido.** Ogni jam pubblica ha un `accessMode` scelto dall'autore:
+  - `open`: ogni musicista idoneo (strumento/livello compatibili) **partecipa subito**, senza approvazione;
+  - `approval`: l'idoneo **invia una richiesta**, l'autore conferma/rifiuta.
+  - Sulla mappa restano **verdi** le jam a cui l'utente è idoneo; per quelle `approval` lo stato passa da "richiesta inviata" a "confermato".
+- **Lezioni (12) — Prenotazione + pagamento da subito.** Niente fase "solo prenotazione": al primo rilascio l'insegnante pubblica disponibilità a calendario e l'allievo prenota **e paga online** (Stripe, stesso modello escrow/commissione delle serate).
+- **Trasposizione (13) — Default da implementare ora.** Flusso di partenza (da rifinire con Valerio):
+  1. L'utente sceglie lo **strumento traspositore** (es. Sax contralto in **Mi♭**, Sax tenore / Clarinetto / Tromba in **Si♭**, strumenti in **Do** = nessuna trasposizione).
+  2. L'accordatore rileva la frequenza e mostra **due note affiancate**: **nota reale** (suono concertistico, in Do) e **nota scritta/letta** dallo strumentista (trasposta dell'intervallo del suo strumento).
+  3. Indicatore di intonazione (cent ±) riferito alla nota reale.
+  - Intervalli default: Mi♭ → nota scritta una **sesta maggiore sopra** il suono reale; Si♭ → una **seconda maggiore sopra**. Configurabile, così Valerio può correggere casi particolari.
 
 > Citazione dal feedback: *"già così praticamente è un gran bel prototipo
 > funzionante"* — ottimo punto di partenza. 🎸

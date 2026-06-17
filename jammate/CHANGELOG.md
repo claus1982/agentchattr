@@ -1,6 +1,16 @@
 # JamMate — Changelog
 
 ## Non rilasciato — Verso il backend reale su Azure
+- **Invita musicisti nella band** (feedback Valerio #6): dal dettaglio di un
+  musicista in "Scopri" → *🎸 Invita nella tua band* (scegli ruolo e messaggio).
+  In "Palco › La mia band" nuova sezione **Formazione & inviti** con stato
+  (in attesa / in formazione / declinato), annulla/rimuovi. Accettazione simulata
+  nel prototipo; modellato lato backend con la tabella `band_invites`.
+- **Decisioni di prodotto fissate** (vedi `FEEDBACK_VALERIO.md`): mappa jam ad
+  **accesso ibrido** (l'autore sceglie aperta/su-approvazione), **Lezioni con
+  pagamento online da subito** (Stripe), **trasposizione accordatore** con flusso
+  di default. Riflesse in `schema.sql` (tabelle `jams`, `jam_participants`,
+  `teacher_profiles`, `lesson_slots`, `lesson_bookings`) e ADR 0006.
 - **Data layer sostituibile** (`storage.js`): l'app non usa più `localStorage`
   direttamente, ma passa da `JM.Storage`. Pronto a puntare ad Azure senza
   riscrivere la UI. Nessun cambiamento visibile per l'utente.
