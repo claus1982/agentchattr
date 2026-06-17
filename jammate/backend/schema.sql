@@ -27,10 +27,11 @@ CREATE TABLE musician_profiles (
   color       TEXT,
   city        TEXT,
   distance_km INT DEFAULT 0,
-  level       TEXT,                               -- Principiante/Intermedio/Avanzato/Pro
+  level       TEXT,                               -- livello "di testa" (il più alto fra gli strumenti)
   bio         TEXT,
   tagline     TEXT,
   instruments TEXT[] NOT NULL DEFAULT '{}',
+  levels      JSONB  NOT NULL DEFAULT '{}',        -- livello per strumento: {"Sax":"Avanzato","Piano":"Principiante"}
   genres      TEXT[] NOT NULL DEFAULT '{}',
   links       JSONB  NOT NULL DEFAULT '{}',       -- {youtube, spotify, instagram}
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()

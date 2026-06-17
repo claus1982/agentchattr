@@ -15,7 +15,7 @@ function freshState() {
     profiles: SEED_PROFILES, events: SEED_EVENTS, messages: SEED_MESSAGES,
     me: {
       id: "me", name: "", avatar: "🎵", color: GRADS[0], photo: "", city: "Milano", distanceKm: 0,
-      instruments: [], level: "Intermedio", genres: [], bio: "", tagline: "",
+      instruments: [], levels: {}, level: "Intermedio", genres: [], bio: "", tagline: "",
       links: { youtube: "", spotify: "", instagram: "" },
       repertoire: [], endo: { puntualita: 0, tecnica: 0, attitudine: 0, endorsements: 0 },
       deep: { done: false }
@@ -27,7 +27,15 @@ function freshState() {
     onboarded: false
   };
 }
-function migrate(s) { const base = freshState(); return Object.assign(base, s, { ui: Object.assign(base.ui, s.ui || {}), me: Object.assign(base.me, s.me || {}) }); }
+function migrate(s) {
+  const base = freshState();
+  const out = Object.assign(base, s, { ui: Object.assign(base.ui, s.ui || {}), me: Object.assign(base.me, s.me || {}) });
+  // Profili creati prima dei livelli per-strumento: deriva la mappa dal livello unico.
+  if (!out.me.levels || !Object.keys(out.me.levels).length) {
+    out.me.levels = {}; (out.me.instruments || []).forEach(i => { out.me.levels[i] = out.me.level || LEVELS[2]; });
+  }
+  return out;
+}
 
 let state = loadState();
 function save() { JM.Storage.set(STORE_KEY, JSON.stringify(state)); }
@@ -39,6 +47,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<"
 // Sicurezza: consenti solo URL http/https nei link utente (blocca javascript:, data:, ecc.)
 const safeUrl = (u) => { const s = String(u ?? "").trim(); return /^https?:\/\//i.test(s) ? s : "#"; };
 const hash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+// Tag strumento + livello per-strumento (es. "Sax · Avanzato"). Vedi levelsOf() in data.js.
+const instrTags = (p) => { const m = levelsOf(p); return (p.instruments || []).map(i => `<span class="tag accent">${esc(i)}${m[i] ? ` · ${esc(m[i])}` : ""}</span>`).join(""); };
 
 function toast(msg) {
   const t = el(`<div class="toast">${esc(msg)}</div>`);
@@ -206,7 +216,9 @@ function renderOnboarding(app) {
       name, city: $("#obCity").value.trim() || "Milano",
       avatar: ["🎸", "🎤", "🥁", "🎹", "🎻", "🎷"][Math.floor(Math.random() * 6)],
       color: GRADS[Math.floor(Math.random() * GRADS.length)],
-      instruments: selIns, level: $("#obLevel").value, genres: selGen
+      instruments: selIns, level: $("#obLevel").value,
+      levels: Object.fromEntries(selIns.map(i => [i, $("#obLevel").value])),
+      genres: selGen
     });
     state.onboarded = true; save();
     toast("Profilo creato! Scorri per trovare musicisti 🔥");
@@ -237,7 +249,7 @@ function getDeck() {
   return state.profiles.filter(p =>
     !state.liked.includes(p.id) && !state.passed.includes(p.id) &&
     (!f.instrument || p.instruments.includes(f.instrument)) &&
-    (!f.level || p.level === f.level) &&
+    (!f.level || levelRank(topLevel(p)) >= levelRank(f.level)) &&
     (!f.genre || p.genres.includes(f.genre)) &&
     p.distanceKm <= f.distance
   );
@@ -289,10 +301,10 @@ function swipeCard(p) {
       </div>
       <div class="body">
         <div class="name">${esc(p.name)} <span class="score">★ ${avgScore(p.endo)}</span></div>
-        <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(p.level)}</div>
+        <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(topLevel(p))}</div>
         <div class="tagline">“${esc(p.tagline || "")}”</div>
         <div class="tags">
-          ${p.instruments.map(i => `<span class="tag accent">${esc(i)}</span>`).join("")}
+          ${instrTags(p)}
           ${p.genres.map(g => `<span class="tag">${esc(g)}</span>`).join("")}
         </div>
         <div class="common">${esc(affCommon(aff, p))}</div>
@@ -412,7 +424,7 @@ function matchProfiles() {
   const f = state.filters;
   return state.profiles.filter(p =>
     (!f.instrument || p.instruments.includes(f.instrument)) &&
-    (!f.level || p.level === f.level) &&
+    (!f.level || levelRank(topLevel(p)) >= levelRank(f.level)) &&
     (!f.genre || p.genres.includes(f.genre)) &&
     p.distanceKm <= f.distance
   ).sort((a, b) => compatibility(b) - compatibility(a));
@@ -431,12 +443,12 @@ function profileCard(p) {
         ${avatarTag(p)}
         <div class="meta">
           <div class="name">${esc(p.name)} <span class="score">★ ${avgScore(p.endo)}</span></div>
-          <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(p.level)}</div>
+          <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(topLevel(p))}</div>
         </div>
         <div class="compat-mini" style="font-weight:800;color:var(--accent)">${affLabel(getAffinity(p))}</div>
       </div>
       <div class="tags">
-        ${p.instruments.map(i => `<span class="tag accent">${esc(i)}</span>`).join("")}
+        ${instrTags(p)}
         ${p.genres.slice(0, 3).map(g => `<span class="tag">${esc(g)}</span>`).join("")}
       </div>
       <div class="tags" style="margin-top:6px"><span class="dist">🎵 ${p.repertoire.length} brani · ${esc(affCommon(getAffinity(p), p))}</span></div>
@@ -476,11 +488,11 @@ function openProfileSheet(p) {
     <div style="text-align:center">
       <div style="display:flex;justify-content:center">${avatarTag(p, true)}</div>
       <h2>${esc(p.name)} ${p.deep && p.deep.done ? '<span class="tag accent" style="font-size:.6rem;vertical-align:middle">🧬</span>' : ''}</h2>
-      <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(p.level)} · <span class="score">★ ${avgScore(p.endo)}</span></div>
+      <div class="loc">📍 ${esc(p.city)} · ${p.distanceKm} km · ${esc(topLevel(p))} · <span class="score">★ ${avgScore(p.endo)}</span></div>
       ${affHeaderHtml(aff)}
     </div>
     <div class="tags" style="justify-content:center;margin-top:10px">
-      ${p.instruments.map(i => `<span class="tag accent">${esc(i)}</span>`).join("")}
+      ${instrTags(p)}
       ${p.genres.map(g => `<span class="tag">${esc(g)}</span>`).join("")}
     </div>
     ${p.bio ? `<div class="section-label">Bio</div><p style="margin:0;line-height:1.5">${esc(p.bio)}</p>` : ""}
@@ -659,7 +671,7 @@ function renderProfile(app) {
       <div style="text-align:center;margin-bottom:8px">
         <div class="avatar-wrap" id="meAvatar" title="Cambia foto">${avatarTag(m, true)}<span class="cam">📷</span></div>
         <h1 class="view-title" style="margin-bottom:0">${esc(m.name || "Il mio profilo")}</h1>
-        <div class="loc">📍 ${esc(m.city)} · ${esc(m.level)}</div>
+        <div class="loc">📍 ${esc(m.city)} · ${esc(topLevel(m))}</div>
       </div>
       <div class="card flat">
         <div class="row-between"><b>🧬 Profilo Profondo</b> ${state.me.deep.done ? '<span class="tag lvl">Completato</span>' : '<span class="badge-new">novità</span>'}</div>
@@ -679,9 +691,10 @@ function renderProfile(app) {
       </div>
       <div class="section-label">Frase a effetto</div>
       <input type="text" id="myTag" placeholder="Es. Riff e groove a volontà" value="${esc(m.tagline)}">
-      <div class="section-label">Strumenti</div><div class="chips" id="myIns">${chips(INSTRUMENTS, m.instruments)}</div>
+      <div class="section-label">Strumenti & livello</div>
+      <div class="chips" id="myIns">${chips(INSTRUMENTS, m.instruments)}</div>
+      <div id="myLevels" style="margin-top:10px"></div>
       <div class="section-label">Generi</div><div class="chips" id="myGen">${chips(GENRES, m.genres)}</div>
-      <div class="section-label">Livello</div><select id="myLvl">${options(LEVELS, m.level)}</select>
       <div class="section-label">Bio</div><textarea id="myBio" placeholder="Racconta chi sei e cosa cerchi…">${esc(m.bio)}</textarea>
       <div class="section-label">Link (per farti ascoltare)</div>
       <input type="text" id="lkYt" placeholder="Link YouTube" value="${esc(m.links.youtube)}" style="margin-bottom:8px">
@@ -699,14 +712,33 @@ function renderProfile(app) {
     m.repertoire.push({ title, artist: $("#repArtist").value.trim(), key: $("#repKey").value });
     save(); $("#repTitle").value = ""; $("#repArtist").value = ""; paintMyRep(); toast("Brano aggiunto 🎵");
   };
-  app.querySelectorAll("#myIns .chip").forEach(c => c.onclick = () => toggleChip(c, m.instruments));
+  app.querySelectorAll("#myIns .chip").forEach(c => c.onclick = () => { toggleChip(c, m.instruments); syncLevels(); paintMyLevels(); });
   app.querySelectorAll("#myGen .chip").forEach(c => c.onclick = () => toggleChip(c, m.genres));
+  syncLevels(); paintMyLevels();
   $("#saveProfile").onclick = () => {
-    m.tagline = $("#myTag").value.trim(); m.bio = $("#myBio").value.trim(); m.level = $("#myLvl").value;
+    m.tagline = $("#myTag").value.trim(); m.bio = $("#myBio").value.trim(); m.level = topLevel(m);
     m.links = { youtube: $("#lkYt").value.trim(), spotify: $("#lkSp").value.trim(), instagram: $("#lkIg").value.trim() };
     save(); toast("Profilo salvato ✓");
   };
   $("#resetApp").onclick = () => { if (confirm("Azzerare tutti i dati e ripartire dalla demo?")) { JM.Storage.remove(STORE_KEY); state = loadState(); navigate("discover"); } };
+}
+// Mantiene allineata la mappa livelli agli strumenti selezionati.
+function syncLevels() {
+  const m = state.me;
+  m.levels = m.levels || {};
+  m.instruments.forEach(i => { if (!m.levels[i]) m.levels[i] = m.level || LEVELS[2]; });
+  Object.keys(m.levels).forEach(i => { if (!m.instruments.includes(i)) delete m.levels[i]; });
+}
+// Una riga "strumento → livello" per ogni strumento selezionato.
+function paintMyLevels() {
+  const box = $("#myLevels"); if (!box) return;
+  if (!state.me.instruments.length) { box.innerHTML = `<p class="view-sub">Seleziona uno strumento qui sopra per impostarne il livello.</p>`; return; }
+  box.innerHTML = "";
+  state.me.instruments.forEach(inst => {
+    const row = el(`<div class="lvl-row"><span class="lvl-inst">${esc(inst)}</span><select>${options(LEVELS, state.me.levels[inst] || LEVELS[2])}</select></div>`);
+    row.querySelector("select").onchange = e => { state.me.levels[inst] = e.target.value; state.me.level = topLevel(state.me); save(); };
+    box.appendChild(row);
+  });
 }
 function paintMyRep() {
   const box = $("#myRep"); if (!box) return;

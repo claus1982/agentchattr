@@ -251,10 +251,11 @@ components:
         photoUrl:    { type: string }
         color:       { type: string }
         city:        { type: string }
-        level:       { type: string, enum: [Principiante, Intermedio, Avanzato, Pro] }
+        level:       { type: string, description: "Livello di testa (più alto fra gli strumenti)", enum: [Principiante, "Principiante - Intermedio", Intermedio, "Intermedio - Avanzato", Avanzato, Professionista] }
         bio:         { type: string }
         tagline:     { type: string }
         instruments: { type: array, items: { type: string } }
+        levels:      { type: object, description: "Livello per strumento", additionalProperties: { type: string } }
         genres:      { type: array, items: { type: string } }
         links:
           type: object
@@ -280,6 +281,7 @@ components:
         distanceKm:  { type: integer }
         level:       { type: string }
         instruments: { type: array, items: { type: string } }
+        levels:      { type: object, additionalProperties: { type: string } }
         genres:      { type: array, items: { type: string } }
         tagline:     { type: string }
         endo:        { $ref: "#/components/schemas/Endorsements" }

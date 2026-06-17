@@ -7,7 +7,26 @@ const INSTRUMENTS = [
   "Pianoforte", "Tastiere", "Violino", "Sax", "Tromba", "DJ / Producer"
 ];
 
-const LEVELS = ["Principiante", "Intermedio", "Avanzato", "Professionista"];
+// Scala a 6 livelli (dal feedback): ordinata dal più basso al più alto.
+const LEVELS = [
+  "Principiante", "Principiante - Intermedio", "Intermedio",
+  "Intermedio - Avanzato", "Avanzato", "Professionista"
+];
+
+// Helper sul livello (puri: nessuna dipendenza dal DOM).
+function levelRank(l) { const i = LEVELS.indexOf(l); return i < 0 ? 0 : i; }
+// Mappa strumento → livello di un profilo (retro-compatibile: se manca, deriva da .level).
+function levelsOf(p) {
+  if (p.levels) return p.levels;
+  const m = {}; (p.instruments || []).forEach(i => { m[i] = p.level || LEVELS[2]; });
+  return m;
+}
+// Livello "di testa" (il più alto fra gli strumenti) per card e filtri.
+function topLevel(p) {
+  const vals = Object.values(levelsOf(p));
+  if (!vals.length) return p.level || "";
+  return vals.reduce((a, b) => (levelRank(b) > levelRank(a) ? b : a), vals[0]);
+}
 
 const GENRES = [
   "Rock", "Pop", "Jazz", "Blues", "Metal", "Funk", "Indie",
@@ -191,6 +210,17 @@ const SEED_PROFILES = [
     endo: { puntualita: 93, tecnica: 89, attitudine: 95 }
   }
 ];
+
+// Normalizza i profili demo: ogni strumento riceve un livello (deriva da .level).
+SEED_PROFILES.forEach(p => {
+  if (!p.levels) { p.levels = {}; (p.instruments || []).forEach(i => { p.levels[i] = p.level; }); }
+});
+// Qualche variazione per mostrare i livelli per-strumento nella sezione Scopri.
+const _setLvl = (id, m) => { const p = SEED_PROFILES.find(x => x.id === id); if (p) Object.assign(p.levels, m); };
+_setLvl("u1", { "Voce": "Intermedio" });                       // chitarra avanzato, voce intermedio
+_setLvl("u4", { "Voce": "Principiante - Intermedio" });        // tastiere avanzato, voce base
+_setLvl("u8", { "Chitarra": "Principiante - Intermedio" });    // voce intermedio, chitarra base
+_setLvl("u9", { "DJ / Producer": "Avanzato" });                // tastiere intermedio, producer avanzato
 
 const SEED_EVENTS = [
   {
