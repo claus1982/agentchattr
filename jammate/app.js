@@ -540,18 +540,46 @@ function openEndorseSheet(p) {
 }
 
 // ---------- Vista: Bacheca ----------
+const boardFilter = { instrument: "", genre: "", openOnly: false, forMe: false };
+function boardMatches(ev) {
+  const m = state.me;
+  return (!boardFilter.instrument || ev.slots.some(s => s.instrument === boardFilter.instrument)) &&
+         (!boardFilter.genre || ev.genres.includes(boardFilter.genre)) &&
+         (!boardFilter.openOnly || ev.slots.some(s => !s.filled)) &&
+         (!boardFilter.forMe || ev.slots.some(s => (m.instruments || []).includes(s.instrument)) || ev.genres.some(g => (m.genres || []).includes(g)));
+}
 function renderBoard(app) {
   app.appendChild(el(`
     <div>
       <div class="row-between"><h1 class="view-title">Bacheca annunci</h1>
       <button class="btn small" id="newAd">＋ Nuovo</button></div>
       <p class="view-sub">Band in cerca di membri e jam vicino a te. Candidati agli slot liberi.</p>
+      <div class="filters">
+        <div class="filter-row">
+          <select id="bfIns">${options(INSTRUMENTS, boardFilter.instrument, "Tutti gli strumenti")}</select>
+          <select id="bfGen">${options(GENRES, boardFilter.genre, "Tutti i generi")}</select>
+        </div>
+        <div class="filter-row">
+          <button class="btn small ${boardFilter.forMe ? "" : "secondary"}" id="bfForMe">🎯 Per me</button>
+          <label class="chip ${boardFilter.openOnly ? "on" : ""}" id="bfOpen" style="display:flex;align-items:center;gap:6px;justify-content:center"><input type="checkbox" ${boardFilter.openOnly ? "checked" : ""} style="pointer-events:none"> Solo slot liberi</label>
+        </div>
+      </div>
       <div id="eventList"></div>
     </div>`));
-  $("#newAd").onclick = openCreateSheet;
-  const box = $("#eventList");
+  $("#newAd").onclick = () => openCreateSheet();
+  $("#bfIns").onchange = e => { boardFilter.instrument = e.target.value; paintEvents(); };
+  $("#bfGen").onchange = e => { boardFilter.genre = e.target.value; paintEvents(); };
+  $("#bfForMe").onclick = () => { boardFilter.forMe = !boardFilter.forMe; renderBoard2(); };
+  $("#bfOpen").onclick = () => { boardFilter.openOnly = !boardFilter.openOnly; renderBoard2(); };
+  paintEvents();
+}
+function paintEvents() {
+  const box = $("#eventList"); if (!box) return;
   if (!state.events.length) return box.innerHTML = `<div class="empty">Ancora nessun annuncio. Creane uno con ＋ Nuovo</div>`;
-  state.events.forEach(ev => box.appendChild(eventCard(ev)));
+  const list = state.events.filter(boardMatches);
+  if (!list.length) return box.innerHTML = `<div class="empty">Nessun annuncio con questi filtri.<br>Prova a togliere qualche filtro. 🔍</div>`;
+  box.innerHTML = "";
+  list.forEach(ev => box.appendChild(eventCard(ev)));
 }
 function eventCard(ev) {
   const open = ev.slots.filter(s => !s.filled).length;
