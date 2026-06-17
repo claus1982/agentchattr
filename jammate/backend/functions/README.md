@@ -19,11 +19,21 @@ functions/
       ├─ health.js           # GET  /v1/health            ✅ completo
       ├─ me.js               # GET/PUT/DELETE /v1/me       ✅ completo
       ├─ discover.js         # GET  /v1/discover           🟡 query ok, affinità da collegare (Tappa 4)
-      ├─ swipes.js           # POST /v1/swipes             ✅ completo (con logica match)
-      └─ bookings.js         # GET/POST/PATCH /v1/bookings 🟡 manca autorizzazione + Stripe (Tappa 5/6)
+      ├─ swipes.js           # POST /v1/swipes (logica match)              ✅
+      ├─ messages.js         # GET /matches, GET/POST /messages/{userId}   ✅
+      ├─ profile.js          # /repertoire, /deep, /endorsements           ✅
+      ├─ bands.js            # /bands, /bands/{id}, inviti (/invites)      ✅
+      ├─ venues.js           # /venues, /venues/{id}/nights                ✅
+      ├─ bookings.js         # GET/POST/PATCH /v1/bookings                 🟡 autorizzazione + Stripe (Tappa 5/6)
+      ├─ jams.js             # /jams, join/requests/participants           ✅
+      ├─ posts.js            # /posts, reazioni, commenti                  ✅
+      ├─ lessons.js          # /teachers, /teacher, /lesson-bookings       🟡 pagamento Stripe (Tappa 6)
+      └─ notifications.js    # GET/PATCH/DELETE /v1/notifications          ✅
 ```
-Endpoint ancora da aggiungere (definiti in `openapi.yaml`): bands, venues,
-reviews, threads/messages, webhooks/stripe, me/deep, me/photo.
+Tutte le query SQL sono state **validate su PostgreSQL 16 reale** con dati di
+esempio. Restano da collegare: **affinità server‑side** (Tappa 4), **autorizzazione
+per‑oggetto** dove segnato, **Stripe** (Tappa 6), la generazione **server‑side delle
+notifiche** dagli eventi e la **realtime** via Web PubSub (ADR 0007).
 
 ## Eseguire in locale
 ```bash

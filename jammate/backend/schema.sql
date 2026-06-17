@@ -279,6 +279,41 @@ CREATE TABLE lesson_bookings (
   UNIQUE (slot_id)
 );
 
+-- ---------- Feed sociale (#11) ----------
+CREATE TABLE posts (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  author_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body       TEXT,
+  image_url  TEXT,                                  -- media su Blob Storage (ADR 0010)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE post_comments (
+  id         BIGSERIAL PRIMARY KEY,
+  post_id    UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  author_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Una reazione per utente per post (emoji multiple: 👍 ❤️ 🔥 😂 …)
+CREATE TABLE post_reactions (
+  post_id    UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  emoji      TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+
+-- ---------- Notifiche (#10) ----------
+CREATE TABLE notifications (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  icon       TEXT,
+  text       TEXT NOT NULL,
+  link_view  TEXT,                                  -- vista frontend da aprire al tap
+  read       BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ---------- Indici per le query più frequenti ----------
 CREATE INDEX idx_profiles_city     ON musician_profiles(city);
 CREATE INDEX idx_profiles_genres   ON musician_profiles USING GIN (genres);
@@ -294,3 +329,7 @@ CREATE INDEX idx_jams_starts       ON jams(starts_at);
 CREATE INDEX idx_jams_geo          ON jams(lat, lng);
 CREATE INDEX idx_jam_parts_user    ON jam_participants(user_id);
 CREATE INDEX idx_lesson_slots_teacher ON lesson_slots(teacher_id, starts_at);
+CREATE INDEX idx_posts_created     ON posts(created_at DESC);
+CREATE INDEX idx_post_comments_post ON post_comments(post_id, created_at);
+CREATE INDEX idx_post_reactions_post ON post_reactions(post_id);
+CREATE INDEX idx_notifications_user ON notifications(user_id, read, created_at DESC);

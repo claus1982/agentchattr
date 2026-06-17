@@ -76,48 +76,95 @@
     configure(options) { Object.assign(cfg, options); },
     get baseUrl() { return cfg.baseUrl; },
 
-    // --- Profilo (vedi openapi.yaml: /me, /me/deep, /me/photo) ---
+    // --- Profilo ---
     me: {
-      get:    () => get("/me"),
-      update: (profile) => put("/me", profile),
-      remove: () => del("/me"),                 // GDPR: cancella account
-      saveDeep: (deep) => put("/me/deep", deep),
-      uploadPhoto: (file) => {                  // file: File/Blob
-        const fd = new FormData(); fd.append("file", file);
-        return post("/me/photo", fd, { isForm: true });
-      }
+      get:      () => get("/me"),
+      update:   (profile) => put("/me", profile),
+      remove:   () => del("/me"),               // GDPR: cancella account
+      saveDeep: (deep) => put("/deep", deep)
+    },
+    // --- Repertorio ---
+    repertoire: {
+      list:   () => get("/repertoire"),
+      add:    (song) => post("/repertoire", song),
+      remove: (id) => del(`/repertoire/${id}`)
+    },
+    // --- Reputazione ---
+    endorsements: {
+      add:     (targetUserId, scores) => post("/endorsements", { targetUserId, ...scores }),
+      summary: (userId) => get(`/endorsements/${userId}/summary`)
     },
 
-    // --- Scoperta / match ---
+    // --- Scoperta / match / messaggi ---
     discover: (filters) => get("/discover", { query: filters }),
     swipe:    (targetUserId, decision) => post("/swipes", { targetUserId, decision }),
     matches:  () => get("/matches"),
+    messages: {
+      with: (userId) => get(`/messages/${userId}`),
+      send: (userId, text) => post(`/messages/${userId}`, { text })
+    },
 
-    // --- Band ---
+    // --- Band + inviti ---
     bands: {
-      mine:   () => get("/bands"),
-      create: (band) => post("/bands", band),
-      update: (id, band) => put(`/bands/${id}`, band)
+      list:    () => get("/bands"),
+      mine:    () => get("/bands/mine"),
+      create:  (band) => post("/bands", band),
+      update:  (id, band) => put(`/bands/${id}`, band),
+      invite:  (id, inviteeId, role, message) => post(`/bands/${id}/invites`, { inviteeId, role, message }),
+      myInvites: () => get("/invites"),
+      respondInvite: (inviteId, action) => patch(`/invites/${inviteId}`, { action })
     },
 
-    // --- Locali ---
+    // --- Locali + serate ---
     venues: {
-      list:   (city) => get("/venues", { query: { city } }),
-      create: (venue) => post("/venues", venue)
+      list:     (city) => get("/venues", { query: { city } }),
+      mine:     () => get("/venues/mine"),
+      create:   (venue) => post("/venues", venue),
+      update:   (id, venue) => put(`/venues/${id}`, venue),
+      addNight: (id, night) => post(`/venues/${id}/nights`, night)
     },
 
-    // --- Prenotazioni ---
+    // --- Prenotazioni serate ---
     bookings: {
-      list:    () => get("/bookings"),
-      create:  (booking) => post("/bookings", booking),
-      setStatus: (id, status, quote) => patch(`/bookings/${id}/status`, { status, quote }),
-      review:  (id, rating, text) => post(`/bookings/${id}/reviews`, { rating, text })
+      list:      () => get("/bookings"),
+      create:    (booking) => post("/bookings", booking),
+      setStatus: (id, status, quote) => patch(`/bookings/${id}/status`, { status, quote })
     },
 
-    // --- Chat ---
-    threads: {
-      messages: (id) => get(`/threads/${id}/messages`),
-      send:     (id, bodyText) => post(`/threads/${id}/messages`, { body: bodyText })
+    // --- Mappa jam ---
+    jams: {
+      list:     () => get("/jams"),
+      create:   (jam) => post("/jams", jam),
+      join:     (id) => post(`/jams/${id}/join`),
+      leave:    (id) => del(`/jams/${id}/join`),
+      requests: (id) => get(`/jams/${id}/requests`),
+      decide:   (id, userId, action) => patch(`/jams/${id}/participants/${userId}`, { action })
+    },
+
+    // --- Feed ---
+    posts: {
+      list:    () => get("/posts"),
+      create:  (p) => post("/posts", p),
+      react:   (id, emoji) => put(`/posts/${id}/reaction`, { emoji }),
+      comments: (id) => get(`/posts/${id}/comments`),
+      comment: (id, text) => post(`/posts/${id}/comments`, { text })
+    },
+
+    // --- Lezioni ---
+    lessons: {
+      teachers:    () => get("/teachers"),
+      teacherSlots: (id) => get(`/teachers/${id}/slots`),
+      saveTeacher: (teacher) => put("/teacher", teacher),
+      addSlot:     (slot) => post("/teacher/slots", slot),
+      myBookings:  () => get("/lesson-bookings"),
+      book:        (slotId) => post("/lesson-bookings", { slotId })
+    },
+
+    // --- Notifiche ---
+    notifications: {
+      list:     () => get("/notifications"),
+      markRead: () => patch("/notifications/read", {}),
+      clear:    () => del("/notifications")
     },
 
     // --- Diagnostica ---

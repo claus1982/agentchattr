@@ -1,6 +1,15 @@
 # JamMate — Changelog
 
 ## Non rilasciato — Verso il backend reale su Azure
+- **Backend API completato** (Azure Functions): endpoint per profilo/repertorio/
+  deep/endorsement, discover/swipe/match/messaggi, band+inviti, locali+serate,
+  jam (join/approvazione), feed (post/reazioni/commenti), lezioni (insegnanti/
+  slot/prenotazioni), notifiche. **Tutte le query validate su PostgreSQL 16 reale.**
+- **Schema esteso**: tabelle `posts`, `post_comments`, `post_reactions`,
+  `notifications` (feed e notifiche server‑side).
+- **IaC + deploy**: `backend/infra/main.bicep` + `deploy.sh` per il deploy in un
+  comando su Azure (subscription dell'utente).
+- **Client API** `JM.Api` allineato a tutti gli endpoint (pronto per il wiring SPA).
 - **Feed più ricco**: selettore **emoji** nel composer, upload **GIF** (animazione
   preservata), e **reazioni multiple** (👍❤️🔥😂🎸👏😮) al posto del solo like.
 - **Messaggi privati dagli autori**: pulsante **✉️ Scrivi** sui post del Feed,
