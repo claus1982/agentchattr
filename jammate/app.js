@@ -18,10 +18,11 @@ function freshState() {
       instruments: [], levels: {}, level: "Intermedio", genres: [], bio: "", tagline: "",
       links: { youtube: "", spotify: "", instagram: "" },
       repertoire: [], endo: { puntualita: 0, tecnica: 0, attitudine: 0, endorsements: 0 },
+      jamCount: 0,
       deep: { done: false }
     },
     liked: [], passed: [], matches: ["u2"],
-    bands: [], myVenue: null, bookings: [],
+    bands: [], myVenue: null, bookings: [], metroPresets: [],
     filters: { instrument: "", level: "", genre: "", distance: 30 },
     ui: { discoverMode: "match", palcoMode: "band", unread: false },
     onboarded: false
@@ -63,6 +64,16 @@ function chips(list, selected) {
 }
 function toggleChip(node, arr) { const v = node.dataset.chip, i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); node.classList.toggle("on"); }
 function avgScore(e) { return Math.round((e.puntualita + e.tecnica + e.attitudine) / 3); }
+// Badge "jam suonate": gamification leggera sui traguardi (#7).
+function jamBadge(n) {
+  n = n || 0;
+  if (n >= 50) return { icon: "🏆", tier: "Leggenda del palco" };
+  if (n >= 25) return { icon: "🥇", tier: "Veterano" };
+  if (n >= 10) return { icon: "🥈", tier: "Habitué" };
+  if (n >= 5)  return { icon: "🥉", tier: "In rampa di lancio" };
+  if (n >= 1)  return { icon: "🎸", tier: "Esordiente dal vivo" };
+  return { icon: "✨", tier: "Pronto a partire" };
+}
 
 // Avatar: foto se presente, altrimenti emoji su gradiente "mesh"
 function avatarTag(o, lg) {
@@ -199,27 +210,39 @@ function renderOnboarding(app) {
         <input type="text" id="obCity" value="Milano" />
         <label class="field" style="margin-top:12px">Strumenti che suoni</label>
         <div class="chips" id="obInstruments">${chips(INSTRUMENTS, [])}</div>
-        <label class="field" style="margin-top:12px">Livello</label>
-        <select id="obLevel">${options(LEVELS, "Intermedio")}</select>
+        <label class="field" style="margin-top:12px">Livello per strumento</label>
+        <div id="obLevels"><p class="view-sub">Seleziona uno strumento qui sopra per impostarne il livello.</p></div>
         <label class="field" style="margin-top:12px">Generi preferiti</label>
         <div class="chips" id="obGenres">${chips(GENRES, [])}</div>
         <button class="btn" id="obDone" style="margin-top:18px">Crea il mio profilo →</button>
       </div>
     </div>`));
-  const selIns = [], selGen = [];
-  app.querySelectorAll("#obInstruments .chip").forEach(c => c.onclick = () => toggleChip(c, selIns));
+  const selIns = [], selGen = [], selLevels = {};
+  // Una riga "strumento → livello" per ogni strumento scelto (default Intermedio).
+  const paintObLevels = () => {
+    const box = $("#obLevels");
+    if (!selIns.length) { box.innerHTML = `<p class="view-sub">Seleziona uno strumento qui sopra per impostarne il livello.</p>`; return; }
+    box.innerHTML = "";
+    selIns.forEach(inst => {
+      if (!selLevels[inst]) selLevels[inst] = LEVELS[2];
+      const row = el(`<div class="lvl-row"><span class="lvl-inst">${esc(inst)}</span><select>${options(LEVELS, selLevels[inst])}</select></div>`);
+      row.querySelector("select").onchange = e => { selLevels[inst] = e.target.value; };
+      box.appendChild(row);
+    });
+  };
+  app.querySelectorAll("#obInstruments .chip").forEach(c => c.onclick = () => { toggleChip(c, selIns); paintObLevels(); });
   app.querySelectorAll("#obGenres .chip").forEach(c => c.onclick = () => toggleChip(c, selGen));
   $("#obDone").onclick = () => {
     const name = $("#obName").value.trim();
     if (!name) return toast("Inserisci almeno il nome");
+    const levels = Object.fromEntries(selIns.map(i => [i, selLevels[i] || LEVELS[2]]));
     Object.assign(state.me, {
       name, city: $("#obCity").value.trim() || "Milano",
       avatar: ["🎸", "🎤", "🥁", "🎹", "🎻", "🎷"][Math.floor(Math.random() * 6)],
       color: GRADS[Math.floor(Math.random() * GRADS.length)],
-      instruments: selIns, level: $("#obLevel").value,
-      levels: Object.fromEntries(selIns.map(i => [i, $("#obLevel").value])),
-      genres: selGen
+      instruments: selIns, levels, genres: selGen
     });
+    state.me.level = topLevel(state.me);
     state.onboarded = true; save();
     toast("Profilo creato! Scorri per trovare musicisti 🔥");
     navigate("discover");
@@ -702,6 +725,7 @@ function renderProfile(app) {
         <div class="avatar-wrap" id="meAvatar" title="Cambia foto">${avatarTag(m, true)}<span class="cam">📷</span></div>
         <h1 class="view-title" style="margin-bottom:0">${esc(m.name || "Il mio profilo")}</h1>
         <div class="loc">📍 ${esc(m.city)} · ${esc(topLevel(m))}</div>
+        <div style="margin-top:8px"><span class="tag lvl">${jamBadge(m.jamCount).icon} ${m.jamCount || 0} jam suonate</span> <span class="view-sub" style="font-size:.78rem">${jamBadge(m.jamCount).tier}</span></div>
       </div>
       <div class="card flat">
         <div class="row-between"><b>🧬 Profilo Profondo</b> ${state.me.deep.done ? '<span class="tag lvl">Completato</span>' : '<span class="badge-new">novità</span>'}</div>
@@ -806,7 +830,14 @@ function renderTools(app) {
 }
 
 // ----- Metronomo (Web Audio) -----
-const metro = { ctx: null, playing: false, bpm: 100, beats: 4, current: 0, nextTime: 0, timer: null, taps: [] };
+const metro = { ctx: null, playing: false, bpm: 100, beats: 4, current: 0, nextTime: 0, timer: null, taps: [], sound: "beep" };
+// Timbri selezionabili del click (#8): forma d'onda + frequenze accento/normale.
+const METRO_SOUNDS = {
+  beep:    { name: "Beep",    type: "sine",     hi: 1500, lo: 900 },
+  click:   { name: "Click",   type: "square",   hi: 2000, lo: 1200 },
+  legno:   { name: "Legno",   type: "triangle", hi: 1200, lo: 760 },
+  cowbell: { name: "Cowbell", type: "sawtooth", hi: 820,  lo: 540 }
+};
 function renderMetronome(box) {
   box.innerHTML = "";
   box.appendChild(el(`
@@ -824,7 +855,19 @@ function renderMetronome(box) {
         <select id="beatsSel" style="width:auto">
           ${[2, 3, 4, 5, 6].map(b => `<option value="${b}"${b === metro.beats ? " selected" : ""}>${b}/4</option>`).join("")}
         </select>
+        <select id="soundSel" style="width:auto">
+          ${Object.entries(METRO_SOUNDS).map(([k, s]) => `<option value="${k}"${k === metro.sound ? " selected" : ""}>🔊 ${esc(s.name)}</option>`).join("")}
+        </select>
       </div>
+      <div class="section-label" style="margin-top:14px">Preset</div>
+      <div class="filter-row">
+        <select id="presetSel" style="flex:1">
+          <option value="">— I tuoi preset —</option>
+          ${(state.metroPresets || []).map((p, i) => `<option value="${i}">${esc(p.name)} · ${p.bpm} BPM · ${p.beats}/4</option>`).join("")}
+        </select>
+        <button class="btn small" id="savePreset">💾 Salva</button>
+      </div>
+      <div id="presetActions"></div>
     </div>`));
   drawBeatDots();
   const setBpm = (v) => { metro.bpm = Math.max(40, Math.min(240, v)); $("#bpmVal").textContent = metro.bpm; $("#bpmRange").value = metro.bpm; };
@@ -832,9 +875,39 @@ function renderMetronome(box) {
   $("#bpmMinus").onclick = () => setBpm(metro.bpm - 1);
   $("#bpmPlus").onclick = () => setBpm(metro.bpm + 1);
   $("#beatsSel").onchange = e => { metro.beats = +e.target.value; metro.current = 0; drawBeatDots(); };
+  $("#soundSel").onchange = e => { metro.sound = e.target.value; clickPreview(); };
   $("#metroToggle").onclick = toggleMetronome;
   $("#tapTempo").onclick = tapTempo;
+  $("#savePreset").onclick = () => saveMetroPreset(box);
+  $("#presetSel").onchange = e => {
+    const i = e.target.value; const acts = $("#presetActions"); acts.innerHTML = "";
+    if (i === "") return;
+    const p = (state.metroPresets || [])[+i]; if (!p) return;
+    const row = el(`<div class="filter-row" style="margin-top:8px">
+      <button class="btn small" id="loadPreset">▶ Carica “${esc(p.name)}”</button>
+      <button class="btn small secondary" id="delPreset">🗑 Elimina</button></div>`);
+    acts.appendChild(row);
+    $("#loadPreset").onclick = () => loadMetroPreset(+i, box);
+    $("#delPreset").onclick = () => { state.metroPresets.splice(+i, 1); save(); toast("Preset eliminato"); renderMetronome(box); };
+  };
 }
+// Salva BPM + battute + suono correnti come preset riutilizzabile (#8).
+function saveMetroPreset(box) {
+  const name = (prompt("Nome del preset", `Brano ${(state.metroPresets || []).length + 1}`) || "").trim();
+  if (!name) return;
+  state.metroPresets = state.metroPresets || [];
+  state.metroPresets.push({ name, bpm: metro.bpm, beats: metro.beats, sound: metro.sound });
+  save(); toast("Preset salvato 💾"); renderMetronome(box);
+}
+function loadMetroPreset(i, box) {
+  const p = (state.metroPresets || [])[i]; if (!p) return;
+  const wasPlaying = metro.playing; if (wasPlaying) stopMetronome();
+  metro.bpm = p.bpm; metro.beats = p.beats; metro.sound = p.sound || "beep"; metro.current = 0;
+  renderMetronome(box); toast(`Caricato “${p.name}”`);
+  if (wasPlaying) toggleMetronome();
+}
+// Breve anteprima udibile del timbro scelto.
+function clickPreview() { try { ensureCtx(); clickAt(metro.ctx.currentTime + 0.02, true); } catch (e) {} }
 function drawBeatDots() {
   const d = $("#beatDots"); if (!d) return;
   d.innerHTML = ""; for (let i = 0; i < metro.beats; i++) d.appendChild(el(`<i class="${i === 0 ? "accent" : ""}"></i>`));
@@ -862,8 +935,10 @@ function metroScheduler() {
   }
 }
 function clickAt(time, accent) {
+  const s = METRO_SOUNDS[metro.sound] || METRO_SOUNDS.beep;
   const o = metro.ctx.createOscillator(), g = metro.ctx.createGain();
-  o.frequency.value = accent ? 1500 : 900;
+  o.type = s.type;
+  o.frequency.value = accent ? s.hi : s.lo;
   g.gain.setValueAtTime(0.001, time);
   g.gain.exponentialRampToValueAtTime(accent ? 0.7 : 0.4, time + 0.001);
   g.gain.exponentialRampToValueAtTime(0.001, time + 0.05);

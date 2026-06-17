@@ -21,13 +21,13 @@ Triage del feedback del primo tester. Legenda stato:
 | 3 | **Filtri in bacheca** + "darli automaticamente" | ✅ Fatto | Filtri per strumento e genere, "solo slot liberi", e toggle **🎯 Per me** che mostra gli annunci adatti ai tuoi strumenti/generi. |
 | 4 | Profilo profondo: "rivedi" mostrava solo "rifai" | ✅ Fatto | Aggiunta vista **📊 Rivedi i risultati** (Big Five, valori top, stile in band) separata da "Rifai". |
 
-## 🔜 Prossimi (frontend, senza backend)
-| # | Richiesta | Priorità | Note di realizzazione |
+## ✅ Quick‑win frontend completati
+| # | Richiesta | Stato | Note di realizzazione |
 |---|---|---|---|
-| 5 | **Livello per‑strumento anche in onboarding** | Media | Oggi l'onboarding usa un livello unico applicato a tutti; poi lo affini nel profilo. Da estendere con selettore per‑strumento in fase di registrazione. |
+| 5 | **Livello per‑strumento anche in onboarding** | ✅ Fatto | In registrazione, appena scegli uno strumento appare una riga **strumento → livello** (scala a 6). Niente più livello unico: imposti subito il livello di ciascuno strumento. |
 | 6 | **Invitare musicisti nella band** | ✅ Fatto | Dal dettaglio di un musicista in "Scopri" → **🎸 Invita nella tua band**: scegli ruolo/strumento e messaggio. In "Palco › La mia band" vedi la sezione **Formazione & inviti** con stato (in attesa / in formazione / declinato); puoi annullare o rimuovere. Nel prototipo l'accettazione è simulata; col backend (tabella `band_invites`) diventa invito reale + notifica + accettazione. |
-| 7 | **Contatore jam a cui hai partecipato** | Media | Campo `jamCount` sul profilo + incremento quando una jam/serata è confermata; badge sul profilo. |
-| 8 | **Metronomo: migliorie** | Media | Es. accenti/battute (4/4, 3/4…), tap‑tempo, suoni selezionabili, salvataggio preset. |
+| 7 | **Contatore jam a cui hai partecipato** | ✅ Fatto | Campo `jamCount` sul profilo, incrementato quando segni una **serata completata** in Palco. Sul profilo compare un **badge a traguardi** (✨ Pronto → 🎸 Esordiente → 🥉/🥈/🥇 → 🏆 Leggenda). |
+| 8 | **Metronomo: migliorie** | ✅ Fatto | Già presenti accenti, battute (2/4…6/4) e tap‑tempo. Aggiunti **suoni selezionabili** (Beep, Click, Legno, Cowbell) con anteprima e **salvataggio preset** (nome + BPM + battute + suono, con carica/elimina). |
 
 ## 🔭 Roadmap (più grandi / con backend Azure)
 | # | Richiesta | Priorità | Note |

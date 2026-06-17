@@ -1,6 +1,15 @@
 # JamMate — Changelog
 
 ## Non rilasciato — Verso il backend reale su Azure
+- **Onboarding con livello per‑strumento** (feedback #5): in registrazione ogni
+  strumento scelto ottiene la sua riga *strumento → livello* (niente più livello
+  unico).
+- **Contatore jam + badge** (feedback #7): nuovo `jamCount` sul profilo,
+  incrementato a ogni *serata completata* in Palco, con badge a traguardi
+  (✨ → 🎸 → 🥉/🥈/🥇 → 🏆).
+- **Metronomo: suoni e preset** (feedback #8): timbri selezionabili (Beep, Click,
+  Legno, Cowbell) con anteprima e salvataggio/caricamento **preset** (nome, BPM,
+  battute, suono).
 - **Invita musicisti nella band** (feedback Valerio #6): dal dettaglio di un
   musicista in "Scopri" → *🎸 Invita nella tua band* (scegli ruolo e messaggio).
   In "Palco › La mia band" nuova sezione **Formazione & inviti** con stato

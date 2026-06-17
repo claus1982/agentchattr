@@ -288,7 +288,7 @@ function bindBookingActions() {
   document.querySelectorAll("[data-act]").forEach(btn => btn.onclick = () => {
     const bk = (state.bookings || []).find(x => x.id === btn.dataset.id); if (!bk) return;
     if (btn.dataset.act === "confirm") { bk.status = "confirmed"; save(); toast("Confermata! Acconto 30% in escrow (simulato) 💳"); openBookings(); }
-    else if (btn.dataset.act === "complete") { bk.status = "completed"; save(); toast("Serata completata 🎉 — ora potete recensirvi"); openBookings(); }
+    else if (btn.dataset.act === "complete") { bk.status = "completed"; state.me.jamCount = (state.me.jamCount || 0) + 1; save(); toast(`Serata completata 🎉 — ${state.me.jamCount} jam all'attivo`); openBookings(); }
     else if (btn.dataset.act === "review") openReviewSheet(bk);
   });
 }
