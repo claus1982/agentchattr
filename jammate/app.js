@@ -704,7 +704,9 @@ function renderProfile(app) {
       <div class="card flat">
         <div class="row-between"><b>🧬 Profilo Profondo</b> ${state.me.deep.done ? '<span class="tag lvl">Completato</span>' : '<span class="badge-new">novità</span>'}</div>
         <p class="view-sub" style="margin:8px 0 12px">Sondaggio opzionale (~4 min): valori da musicista + un test di personalità validato (Big Five). Sblocca la <b>Sintonia</b> con chi l'ha fatto. Ludico ma scientifico, niente diagnosi.</p>
-        <button class="btn" id="startDeep">${state.me.deep.done ? "Rivedi / rifai il sondaggio" : "Inizia il Profilo Profondo"}</button>
+        ${state.me.deep.done
+          ? `<div class="filter-row"><button class="btn small" id="reviewDeep">📊 Rivedi i risultati</button><button class="btn small secondary" id="redoDeep">↺ Rifai il sondaggio</button></div>`
+          : `<button class="btn" id="startDeep">Inizia il Profilo Profondo</button>`}
       </div>
       <div class="hint">💡 Il tuo <b>repertorio con le tonalità</b> ti rende trovabile e aumenta la compatibilità con chi sa gli stessi brani. È la marcia in più di JamMate.</div>
       <div class="section-label">Repertorio & tonalità</div>
@@ -734,7 +736,9 @@ function renderProfile(app) {
     </div>`));
   paintMyRep();
   $("#meAvatar").onclick = pickPhoto;
-  $("#startDeep").onclick = openDeepSurvey;
+  if ($("#startDeep")) $("#startDeep").onclick = () => openDeepSurvey();
+  if ($("#reviewDeep")) $("#reviewDeep").onclick = openDeepResults;
+  if ($("#redoDeep")) $("#redoDeep").onclick = () => openDeepSurvey();
   $("#addRep").onclick = () => {
     const title = $("#repTitle").value.trim(); if (!title) return toast("Scrivi il titolo del brano");
     m.repertoire.push({ title, artist: $("#repArtist").value.trim(), key: $("#repKey").value });
@@ -973,6 +977,43 @@ function playRef(freq, btn) {
   setTimeout(() => { if (tuner.osc === o) { try { o.stop(); } catch (e) {} tuner.osc = null; btn.classList.remove("on"); btn.dataset.playing = ""; } }, 2000);
 }
 function ensureTunerCtx() { tuner.ctx = tuner.ctx || new (window.AudioContext || window.webkitAudioContext)(); if (tuner.ctx.state === "suspended") tuner.ctx.resume(); }
+
+// ---------- Riepilogo "Profilo Profondo" (Rivedi) ----------
+function openDeepResults() {
+  const d = state.me.deep;
+  if (!d || !d.done) return openDeepSurvey();
+  const bar = (label, frac, hint) => {
+    const pct = Math.round(Math.max(0, Math.min(1, frac)) * 100);
+    return `<div class="dp-row"><div class="dp-top"><span>${esc(label)}</span><span class="dp-pct">${pct}%</span></div>
+      <div class="dp-bar"><i style="width:${pct}%"></i></div>${hint ? `<div class="dp-hint">${esc(hint)}</div>` : ""}</div>`;
+  };
+  const big5 = d.big5 || {};
+  const personalita = [
+    ["Apertura mentale", big5.O],
+    ["Coscienziosità", big5.C],
+    ["Estroversione", big5.E],
+    ["Gradevolezza", big5.A],
+    ["Stabilità emotiva", big5.N != null ? 1 - big5.N : undefined]
+  ].filter(([, v]) => v != null);
+  // Top 3 valori (i più importanti per te)
+  const topVals = Object.entries(d.values || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
+  // Ruolo (circumplex interpersonale)
+  const ipc = d.ipc || { D: 0, W: 0 };
+  const ruolo = (ipc.D > 0.08 ? "Tendi a guidare" : ipc.D < -0.08 ? "Tendi a dare supporto" : "Equilibrio fra guida e supporto")
+    + " · " + (ipc.W > 0.08 ? "stile caloroso e collaborativo" : ipc.W < -0.08 ? "stile diretto e indipendente" : "stile equilibrato");
+
+  openModal(`
+    <h2>🧬 Il tuo Profilo Profondo</h2>
+    <div class="aff-note">Una fotografia indicativa di come ti poni quando suoni. Serve a suggerire affinità, non è una diagnosi. Puoi rifarlo quando vuoi.</div>
+    <div class="section-label">Personalità (Big Five)</div>
+    ${personalita.map(([l, v]) => bar(l, v)).join("")}
+    ${topVals.length ? `<div class="section-label">Cosa conta di più per te</div><div class="tags">${topVals.map(v => `<span class="tag accent">${esc(v)}</span>`).join("")}</div>` : ""}
+    <div class="section-label">Stile in band</div>
+    <p style="margin:0;line-height:1.5">${esc(ruolo)}.</p>
+    <button class="btn secondary" id="redoDeep2" style="margin-top:18px">↺ Rifai il sondaggio</button>
+  `);
+  $("#redoDeep2").onclick = () => openDeepSurvey();
+}
 
 // ---------- Sondaggio "Profilo Profondo" ----------
 function openDeepSurvey() {
